@@ -1,0 +1,60 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 215 28% 7%;
+    --foreground: 213 31% 91%;
+    --card: 215 25% 10%;
+    --card-foreground: 213 31% 91%;
+    --popover: 215 25% 10%;
+    --popover-foreground: 213 31% 91%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 20% 15%;
+    --secondary-foreground: 213 31% 91%;
+    --muted: 215 20% 13%;
+    --muted-foreground: 215 16% 55%;
+    --accent: 215 20% 17%;
+    --accent-foreground: 213 31% 91%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 20% 16%;
+    --input: 215 20% 16%;
+    --ring: 217 91% 60%;
+    --radius: 0.5rem;
+    --sidebar-bg: 215 30% 5%;
+    --status-new: 215 16% 47%;
+    --status-inprogress: 217 91% 60%;
+    --status-hold: 38 92% 50%;
+    --status-done: 142 71% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-inter antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}

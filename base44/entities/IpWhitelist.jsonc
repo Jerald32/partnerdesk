@@ -1,0 +1,52 @@
+{
+  "name": "IpWhitelist",
+  "type": "object",
+  "properties": {
+    "ip_address": {
+      "type": "string",
+      "description": "\ud5c8\uc6a9 IP \uc8fc\uc18c"
+    },
+    "description": {
+      "type": "string",
+      "description": "\uc124\uba85 (\uc608: \ubcf8\uc0ac, \ud30c\ud2b8\ub108\uc0ac A)"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "ip_address"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

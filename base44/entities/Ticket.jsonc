@@ -1,0 +1,190 @@
+{
+  "name": "Ticket",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "request_type": {
+      "type": "string",
+      "enum": [
+        "\uc7a5\uc560/\uace0\uc7a5",
+        "\uc124\uce58 \uc694\uccad",
+        "\uc810\uac80/\uc720\uc9c0\ubcf4\uc218",
+        "\uad50\uccb4 \uc694\uccad",
+        "\uc18c\ud504\ud2b8\uc6e8\uc5b4 \uc624\ub958",
+        "\ub124\ud2b8\uc6cc\ud06c \ubb38\uc81c",
+        "\uc774\uc804/\ucca0\uac70",
+        "\uae30\ud0c0"
+      ],
+      "description": "\uc694\uccad \uc720\ud615"
+    },
+    "request_detail": {
+      "type": "string",
+      "description": "\uc694\uccad\uc0ac\ud56d \uc0c1\uc138 \ub0b4\uc6a9"
+    },
+    "business_id": {
+      "type": "string",
+      "description": "Reference to Business"
+    },
+    "partner_id": {
+      "type": "string",
+      "description": "Assigned Partner ID"
+    },
+    "operator_id": {
+      "type": "string",
+      "description": "Assigned Operator user ID"
+    },
+    "operator_name": {
+      "type": "string",
+      "description": "\ub2f4\ub2f9\uc790\uba85 \uce90\uc2dc (\ud45c\uc2dc\uc6a9)"
+    },
+    "customer_name": {
+      "type": "string"
+    },
+    "customer_company": {
+      "type": "string",
+      "description": "\uace0\uac1d \uc0c1\ud638"
+    },
+    "customer_contact": {
+      "type": "string"
+    },
+    "address": {
+      "type": "string",
+      "description": "\ud604\uc7a5 \uc9c0\uc6d0 \ucd9c\ub3d9 \uc8fc\uc18c (\ub3c4\ub85c\uba85, \ub2e4\uc74c \uc6b0\ud3b8\ubc88\ud638 \uac80\uc0c9)"
+    },
+    "address_detail": {
+      "type": "string",
+      "description": "\uc0c1\uc138\uc8fc\uc18c (\uac74\ubb3c\u00b7\uce35\u00b7\ud638\uc218 \ub4f1)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "new",
+        "inprogress",
+        "hold",
+        "done"
+      ],
+      "default": "new"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "low",
+        "normal",
+        "high",
+        "urgent"
+      ],
+      "default": "normal"
+    },
+    "resolved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "retention_processed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ubcf4\uc874\uae30\ud55c(3\ub144) \uacbd\uacfc \ube44\uc2dd\ubcc4\ud654 \ucc98\ub9ac \uc77c\uc2dc"
+    }
+  },
+  "required": [
+    "title",
+    "business_id",
+    "priority"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    }
+  }
+}

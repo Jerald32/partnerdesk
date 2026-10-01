@@ -1,0 +1,124 @@
+{
+  "name": "Partner",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Partner company name"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "manufacturer",
+        "maintenance",
+        "installation",
+        "support",
+        "other"
+      ],
+      "description": "Partner type"
+    },
+    "contact_name": {
+      "type": "string"
+    },
+    "contact_email": {
+      "type": "string"
+    },
+    "contact_phone": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string",
+      "description": "\ud30c\ud2b8\ub108\uc0ac \uc18c\uac1c"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "\ub85c\uace0 \uc774\ubbf8\uc9c0 URL"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    }
+  }
+}

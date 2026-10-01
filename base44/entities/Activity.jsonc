@@ -1,0 +1,124 @@
+{
+  "name": "Activity",
+  "type": "object",
+  "properties": {
+    "ticket_id": {
+      "type": "string",
+      "description": "Reference to Ticket"
+    },
+    "user_id": {
+      "type": "string"
+    },
+    "user_name": {
+      "type": "string"
+    },
+    "user_role": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "comment",
+        "status_change",
+        "note",
+        "assignment",
+        "view"
+      ],
+      "default": "comment"
+    },
+    "content": {
+      "type": "string"
+    },
+    "is_internal": {
+      "type": "boolean",
+      "default": false
+    },
+    "meta": {
+      "type": "object",
+      "description": "Extra metadata e.g. old/new status"
+    }
+  },
+  "required": [
+    "ticket_id",
+    "type",
+    "content"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    }
+  }
+}

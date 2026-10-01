@@ -1,0 +1,113 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string"
+    },
+    "ticket_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "sla_warning",
+        "sla_breach",
+        "status_change",
+        "new_comment",
+        "assignment"
+      ],
+      "default": "status_change"
+    },
+    "message": {
+      "type": "string"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "required": [
+    "user_id",
+    "message",
+    "type"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    }
+  }
+}

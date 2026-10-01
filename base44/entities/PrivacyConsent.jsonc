@@ -1,0 +1,66 @@
+{
+  "name": "PrivacyConsent",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 ID"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790\uba85"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 \uc774\uba54\uc77c"
+    },
+    "company": {
+      "type": "string",
+      "description": "\uc18c\uc18d\uc0ac"
+    },
+    "consent_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uc11c\uc57d \uc77c\uc2dc"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date",
+      "description": "\uc11c\uc57d \uc720\ud6a8\uae30\uac04 \ub9cc\ub8cc\uc77c (1\ub144)"
+    },
+    "pledge_version": {
+      "type": "string",
+      "description": "\uc11c\uc57d\uc11c \ubc84\uc804"
+    }
+  },
+  "required": [
+    "user_id",
+    "consent_date",
+    "valid_until"
+  ],
+  "rls": {
+    "create": true,
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "name": "AccessLog",
+  "type": "object",
+  "properties": {
+    "seq": {
+      "type": "number",
+      "description": "\ubb34\uacb0\uc131 \uc5f0\ubc88 (\uae30\ub85d \uc21c\uc11c, \uc704\u00b7\ubcc0\uc870 \ud0d0\uc9c0\uc6a9)"
+    },
+    "user_id": {
+      "type": "string",
+      "description": "\uc811\uc18d\uc790 \uc2dd\ubcc4\uc790 (\uc0ac\uc6a9\uc790 ID)"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "\uc811\uc18d\uc790\uba85"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "\uc811\uc18d\uc790 \uc774\uba54\uc77c (\uacc4\uc815 \uc2dd\ubcc4\uc790)"
+    },
+    "user_role": {
+      "type": "string",
+      "description": "\uc811\uc18d \uc2dc\uc810\uc758 \ub4f1\uae09"
+    },
+    "user_ip": {
+      "type": "string",
+      "description": "\uc811\uc18d\uc9c0 \uc815\ubcf4 (\uc811\uc18d IP)"
+    },
+    "accessed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uc811\uc18d \uc77c\uc2dc"
+    },
+    "action": {
+      "type": "string",
+      "description": "\uc218\ud589 \uc5c5\ubb34 (\ub85c\uadf8\uc778, \uc870\ud68c, \ucd9c\ub825, \ubcc0\uacbd, \uc0ad\uc81c \ub4f1)"
+    },
+    "target_type": {
+      "type": "string",
+      "description": "\uc218\ud589 \uc5c5\ubb34 \ub300\uc0c1 (\ud2f0\ucf13 \ubaa9\ub85d, \ud2f0\ucf13 \uc0c1\uc138, \uc0ac\uc6a9\uc790 \uc815\ubcf4 \ub4f1)"
+    },
+    "target_id": {
+      "type": "string",
+      "description": "\ub300\uc0c1 \ub808\ucf54\ub4dc ID"
+    },
+    "subject_info": {
+      "type": "string",
+      "description": "\ucc98\ub9ac\ud55c \uc815\ubcf4\uc8fc\uccb4\uc758 \uc815\ubcf4 (\uace0\uac1d\uba85\u00b7\uc5f0\ub77d\ucc98\u00b7\uc8fc\uc18c \ub4f1 \uc694\uc57d)"
+    },
+    "detail": {
+      "type": "string",
+      "description": "\uc218\ud589 \uc5c5\ubb34 \uc0c1\uc138"
+    },
+    "prev_hash": {
+      "type": "string",
+      "description": "\uc9c1\uc804 \uae30\ub85d\uc758 \ubb34\uacb0\uc131 \ud574\uc2dc (\uae30\ub85d \uc5f0\uacb0\uace0\ub9ac)"
+    },
+    "record_hash": {
+      "type": "string",
+      "description": "\uc774 \uae30\ub85d\uc758 \ubb34\uacb0\uc131 \ud574\uc2dc (SHA-256)"
+    }
+  },
+  "required": [
+    "user_id",
+    "accessed_at",
+    "action"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "system"
+      }
+    },
+    "delete": false
+  }
+}

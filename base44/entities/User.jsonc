@@ -1,0 +1,77 @@
+{
+  "name": "User",
+  "type": "object",
+  "properties": {
+    "role": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "operator",
+        "partner_admin",
+        "guest"
+      ],
+      "default": "guest",
+      "description": "\uc0ac\uc6a9\uc790 \ub4f1\uae09 (admin=\uc804\uccb4 \uad00\ub9ac\uc790, operator=\uc6b4\uc601\uc790, partner_admin=\ud30c\ud2b8\ub108 \uad00\ub9ac\uc790, guest=\ubbf8\uc2b9\uc778)"
+    },
+    "org_type": {
+      "type": "string",
+      "enum": [
+        "operator_company",
+        "partner"
+      ],
+      "description": "\uc18c\uc18d\uc0ac \ub4f1\uae09 (operator_company=\uc6b4\uc601\uc0ac/SK Shieldus, partner=\ud30c\ud2b8\ub108\uc0ac). \ube44\uc988\ub2c8\uc2a4\ubcc4 business/service \uad6c\ubd84\uc740 ServicePartner.access_level\uc5d0\uc11c \uad00\ub9ac"
+    },
+    "affiliation": {
+      "type": "string",
+      "description": "\uc18c\uc18d\uc0ac \uc2dd\ubcc4 (\uc6b4\uc601\uc0ac=\ud68c\uc0ac\uba85, \ud30c\ud2b8\ub108\uc0ac=Partner \uc5d4\ud2f0\ud2f0 ID)"
+    },
+    "job_title": {
+      "type": "string",
+      "description": "\uc9c1\ucc45 (\uc0ac\uc6a9\uc790 \uc9c1\uc811 \uc785\ub825)"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 \uc9c0\uc815 \ud45c\uc2dc \uc774\ub984 (full_name \uc624\ubc84\ub77c\uc774\ub4dc)"
+    },
+    "profile_image_url": {
+      "type": "string",
+      "description": "\ud504\ub85c\ud544 \uc774\ubbf8\uc9c0 URL"
+    },
+    "last_login_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ucd5c\uc885 \ub85c\uadf8\uc778 \uc77c\uc2dc"
+    },
+    "account_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive_warning",
+        "suspended"
+      ],
+      "default": "active",
+      "description": "\uacc4\uc815 \uc0c1\ud0dc (\uc815\uc0c1/\ubbf8\uc811\uc18d \uacbd\uace0/\ucc28\ub2e8)"
+    },
+    "mfa_fail_count": {
+      "type": "number",
+      "default": 0,
+      "description": "MFA \uc778\uc99d\ubc88\ud638 \uc5f0\uc18d \uc2e4\ud328 \ud69f\uc218 (5\ud68c \uc2e4\ud328 \uc2dc \uc7a0\uae08)"
+    },
+    "mfa_locked_until": {
+      "type": "string",
+      "format": "date-time",
+      "description": "MFA \uc7a0\uae08 \ub9cc\ub8cc \uc77c\uc2dc (\uc7a0\uae08 \ud6c4 5\ubd84)"
+    },
+    "password_changed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ub9c8\uc9c0\ub9c9 \ube44\ubc00\ubc88\ud638 \ubcc0\uacbd(\uc7ac\uc124\uc815) \uc644\ub8cc \uc77c\uc2dc \u2014 \ubd84\uae30 1\ud68c(90\uc77c) \ubcc0\uacbd \uc8fc\uae30 \uc548\ub0b4 \uae30\uc900"
+    },
+    "password_reset_requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ube44\ubc00\ubc88\ud638 \uc7ac\uc124\uc815 \uba54\uc77c \uc694\uccad \uc77c\uc2dc \u2014 \uc694\uccad \ud6c4 \uccab \ub85c\uadf8\uc778 \uc2dc \ubcc0\uacbd \uc644\ub8cc\ub85c \uae30\ub85d\ud558\uae30 \uc704\ud55c \ud310\uc815\uac12"
+    }
+  },
+  "required": []
+}

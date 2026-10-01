@@ -1,0 +1,44 @@
+{
+  "name": "Inactive Account Check",
+  "description": "\ub9e4\uc77c \uc0c8\ubcbd 2\uc2dc \ud30c\ud2b8\ub108 \uacc4\uc815 \ubbf8\uc811\uc18d \uc0c1\ud0dc \uc810\uac80 (23\uc77c \uacbd\uace0, 30\uc77c \ucc28\ub2e8)",
+  "trigger": {
+    "condition": null,
+    "config": {
+      "trigger_type": "scheduled",
+      "events": [],
+      "schedule_mode": "recurring",
+      "cron_expression": "0 17 * * *",
+      "one_time_date": null,
+      "timezone": "UTC",
+      "interval_value": null,
+      "interval_unit": null,
+      "interval_anchor": null,
+      "ends_type": "never",
+      "ends_on_date": null,
+      "ends_after_count": null
+    }
+  },
+  "definition": {
+    "document": {
+      "dsl": "1.0.0",
+      "name": "inactive_account_check",
+      "version": "1.0",
+      "namespace": "base44"
+    },
+    "do": [
+      {
+        "run_function": {
+          "call": "invoke_backend_function",
+          "with": {
+            "function_name": "checkInactiveAccounts",
+            "args": {}
+          },
+          "then": "end"
+        }
+      }
+    ]
+  },
+  "x-base44-migrated-from-automation": {
+    "legacy_payload_function": "checkInactiveAccounts"
+  }
+}

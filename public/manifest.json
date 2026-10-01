@@ -1,0 +1,11 @@
+{
+  "name": "PartnerDesk",
+  "short_name": "PartnerDesk",
+  "description": "파트너·티켓 통합 관리 시스템",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ko"
+}

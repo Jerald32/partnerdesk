@@ -1,0 +1,134 @@
+{
+  "name": "RoleRequest",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\uc694\uccad\ud55c \uc0ac\uc6a9\uc790 ID"
+    },
+    "user_name": {
+      "type": "string",
+      "description": "\uc694\uccad\ud55c \uc0ac\uc6a9\uc790 \uc774\ub984"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "\uc694\uccad\ud55c \uc0ac\uc6a9\uc790 \uc774\uba54\uc77c"
+    },
+    "current_role": {
+      "type": "string",
+      "description": "\ud604\uc7ac \uc5ed\ud560"
+    },
+    "current_org_type": {
+      "type": "string",
+      "description": "\ud604\uc7ac \uc18c\uc18d\uc0ac \ub4f1\uae09"
+    },
+    "current_affiliation": {
+      "type": "string",
+      "description": "\ud604\uc7ac \uc18c\uc18d\uc0ac"
+    },
+    "requested_role": {
+      "type": "string",
+      "enum": [
+        "operator",
+        "partner_admin"
+      ],
+      "description": "\uc694\uccad\ud558\ub294 \uc5ed\ud560"
+    },
+    "requested_org_type": {
+      "type": "string",
+      "enum": [
+        "operator_company",
+        "partner"
+      ],
+      "description": "\uc694\uccad\ud558\ub294 \uc18c\uc18d\uc0ac \ub4f1\uae09"
+    },
+    "justification": {
+      "type": "string",
+      "description": "\uc694\uccad \uc0ac\uc720"
+    },
+    "company": {
+      "type": "string",
+      "description": "\uc18c\uc18d\uc0ac \uc2dd\ubcc4 (\uc6b4\uc601\uc0ac=\ud68c\uc0ac\uba85, \ud30c\ud2b8\ub108\uc0ac=Partner ID)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "denied"
+      ],
+      "default": "pending",
+      "description": "\ucc98\ub9ac \uc0c1\ud0dc"
+    },
+    "admin_notes": {
+      "type": "string",
+      "description": "\uad00\ub9ac\uc790 \ucc98\ub9ac \uba54\ubaa8"
+    },
+    "consent_agreed": {
+      "type": "boolean",
+      "description": "\ubcf4\uc548 \ubc0f \uac1c\uc778\uc815\ubcf4 \ucc98\ub9ac \ub3d9\uc758 \uc5ec\ubd80"
+    },
+    "consent_agreed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ub3d9\uc758 \uc2dc\uc810"
+    }
+  },
+  "required": [
+    "user_id",
+    "requested_role",
+    "justification"
+  ],
+  "rls": {
+    "create": true,
+    "read": {
+      "$or": [
+        {
+          "created_by": "{{user.email}}"
+        },
+        {
+          "$and": [
+            {
+              "user_condition": {
+                "role": "admin"
+              }
+            },
+            {
+              "user_condition": {
+                "data.org_type": "operator_company"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "update": {
+      "$and": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "data.org_type": "operator_company"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$and": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "data.org_type": "operator_company"
+          }
+        }
+      ]
+    }
+  }
+}

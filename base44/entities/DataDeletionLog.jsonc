@@ -1,0 +1,76 @@
+{
+  "name": "DataDeletionLog",
+  "type": "object",
+  "properties": {
+    "run_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ud30c\uae30 \ucc98\ub9ac \uc2e4\ud589 \uc77c\uc2dc"
+    },
+    "retention_threshold": {
+      "type": "string",
+      "format": "date",
+      "description": "\ubcf4\uad00\uae30\ud55c \uae30\uc900\uc77c (\uc774 \uc77c\uc790 \uc774\uc804 \uc644\ub8cc\uac74 \ucc98\ub9ac)"
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": [
+        "ticket",
+        "activity",
+        "notification"
+      ],
+      "description": "\ucc98\ub9ac \ub300\uc0c1 \ud56d\ubaa9"
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "anonymized",
+        "deleted"
+      ],
+      "description": "\ucc98\ub9ac \ubc29\uc2dd (\ube44\uc2dd\ubcc4\ud654/\uc0ad\uc81c)"
+    },
+    "count": {
+      "type": "number",
+      "description": "\ucc98\ub9ac \uac74\uc218"
+    },
+    "details": {
+      "type": "string",
+      "description": "\ucc98\ub9ac \uc0c1\uc138 \ub0b4\uc5ed (\ub300\uc0c1 ID \ub4f1)"
+    },
+    "triggered_by": {
+      "type": "string",
+      "enum": [
+        "automation",
+        "manual"
+      ],
+      "description": "\uc2e4\ud589 \uc8fc\uccb4"
+    }
+  },
+  "required": [
+    "entity_type",
+    "method",
+    "count"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

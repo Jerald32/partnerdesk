@@ -1,0 +1,119 @@
+{
+  "name": "ServicePartner",
+  "type": "object",
+  "properties": {
+    "business_id": {
+      "type": "string",
+      "description": "Reference to Business"
+    },
+    "partner_id": {
+      "type": "string",
+      "description": "Reference to Partner"
+    },
+    "access_level": {
+      "type": "string",
+      "enum": [
+        "business",
+        "service"
+      ],
+      "default": "service",
+      "description": "\uad8c\ud55c \ub4f1\uae09: business=\uc0ac\uc5c5\ud30c\ud2b8\ub108(\ud574\ub2f9 \ube44\uc988\ub2c8\uc2a4 \uc804\uccb4 \ud2f0\ucf13 \uc870\ud68c), service=\uc11c\ube44\uc2a4\ud30c\ud2b8\ub108(\ud560\ub2f9\ub41c \ud2f0\ucf13\ub9cc \uc870\ud68c)"
+    },
+    "role": {
+      "type": "string",
+      "description": "Role of partner in this business"
+    },
+    "sla_response_hours": {
+      "type": "number",
+      "description": "SLA response time in hours",
+      "default": 4
+    },
+    "sla_resolution_hours": {
+      "type": "number",
+      "description": "SLA resolution time in hours",
+      "default": 24
+    }
+  },
+  "required": [
+    "business_id",
+    "partner_id"
+  ],
+  "rls": {
+    "read": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "operator"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "partner_admin"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "name": "UserSession",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 ID"
+    },
+    "last_auth_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ub9c8\uc9c0\ub9c9 \uc778\uc99d(MFA \ud1b5\uacfc) \uc77c\uc2dc"
+    },
+    "session_revoked_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uc138\uc158 \ubb34\ud6a8\ud654(\ub85c\uadf8\uc544\uc6c3) \uc77c\uc2dc \u2014 \uc774 \uac12\uc774 \uc778\uc99d \uc77c\uc2dc\ubcf4\ub2e4 \ucd5c\uc2e0\uc774\uba74 \ud574\ub2f9 \uacc4\uc815\uc758 \ubaa8\ub4e0 \uc11c\ubc84 \uce21 \uc694\uccad\uc774 \uac70\ubd80\ub428"
+    },
+    "session_id": {
+      "type": "string",
+      "description": "\ud604\uc7ac \uc720\ud6a8\ud55c \uae30\uae30 \uc138\uc158 \uc2dd\ubcc4\uc790 \u2014 \uc0c8 \uae30\uae30\uc5d0\uc11c \uc778\uc99d\ud558\uba74 \uad50\uccb4\ub418\uc5b4 \uc774\uc804 \uae30\uae30 \uc138\uc158\uc774 \uc790\ub3d9 \ubb34\ud6a8\ud654\ub428(\ub3d9\uc2dc\uc811\uc18d \ucc28\ub2e8)"
+    },
+    "device_label": {
+      "type": "string",
+      "description": "\ub9c8\uc9c0\ub9c9\uc73c\ub85c \uc778\uc99d\ud55c \uae30\uae30 \uc815\ubcf4 (\ube0c\ub77c\uc6b0\uc800 \u00b7 OS)"
+    },
+    "last_seen_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uc138\uc158 \ucd5c\uc885 \uac31\uc2e0(\uc778\uc99d) \uc2dc\uac01"
+    }
+  },
+  "required": [
+    "user_id"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

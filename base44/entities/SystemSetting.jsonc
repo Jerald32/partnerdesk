@@ -1,0 +1,40 @@
+{
+  "name": "SystemSetting",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string",
+      "description": "\uc124\uc815 \ud0a4 (\uc608: ip_restriction_enabled)"
+    },
+    "value": {
+      "type": "string",
+      "description": "\uc124\uc815 \uac12"
+    }
+  },
+  "required": [
+    "key",
+    "value"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

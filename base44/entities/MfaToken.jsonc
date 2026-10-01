@@ -1,0 +1,55 @@
+{
+  "name": "MfaToken",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 ID"
+    },
+    "user_email": {
+      "type": "string",
+      "description": "\uc0ac\uc6a9\uc790 \uc774\uba54\uc77c"
+    },
+    "code": {
+      "type": "string",
+      "description": "6\uc790\ub9ac \uc778\uc99d \ucf54\ub4dc"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ub9cc\ub8cc \uc2dc\uac04 (\ubc1c\uc1a1 \ud6c4 5\ubd84)"
+    },
+    "consumed": {
+      "type": "boolean",
+      "default": false,
+      "description": "\uc0ac\uc6a9 \uc644\ub8cc \uc5ec\ubd80"
+    }
+  },
+  "required": [
+    "user_id",
+    "code",
+    "expires_at"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}

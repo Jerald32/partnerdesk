@@ -1,0 +1,87 @@
+{
+  "name": "AccessLogBackup",
+  "type": "object",
+  "properties": {
+    "run_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ubc31\uc5c5 \uc2e4\ud589 \uc77c\uc2dc"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ubc31\uc5c5 \ub300\uc0c1 \uae30\uac04 \uc2dc\uc791 (\ucd5c\ucd08 \uc811\uc18d \uc77c\uc2dc)"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\ubc31\uc5c5 \ub300\uc0c1 \uae30\uac04 \uc885\ub8cc (\ucd5c\uc885 \uc811\uc18d \uc77c\uc2dc)"
+    },
+    "log_count": {
+      "type": "number",
+      "description": "\ubc31\uc5c5\ub41c \uc811\uc18d\uae30\ub85d \uac74\uc218"
+    },
+    "first_seq": {
+      "type": "number",
+      "description": "\ubc31\uc5c5 \ub300\uc0c1 \ucd5c\ucd08 \uc5f0\ubc88"
+    },
+    "last_seq": {
+      "type": "number",
+      "description": "\ubc31\uc5c5 \ub300\uc0c1 \ucd5c\uc885 \uc5f0\ubc88"
+    },
+    "file_name": {
+      "type": "string",
+      "description": "\ubc31\uc5c5 \ud30c\uc77c\uba85"
+    },
+    "file_uri": {
+      "type": "string",
+      "description": "\ubcc4\ub3c4 \ubcf4\uad00\uc6a9 \ubc31\uc5c5 \ud30c\uc77c \uc704\uce58 (\ube44\uacf5\uac1c \uc800\uc7a5\uc18c)"
+    },
+    "file_hash": {
+      "type": "string",
+      "description": "\ubc31\uc5c5 \ud30c\uc77c \ubb34\uacb0\uc131 \ud574\uc2dc (SHA-256)"
+    },
+    "integrity_ok": {
+      "type": "boolean",
+      "description": "\ubc31\uc5c5 \uc2dc\uc810 \ubb34\uacb0\uc131 \uac80\uc99d \uacb0\uacfc"
+    },
+    "integrity_detail": {
+      "type": "string",
+      "description": "\ubb34\uacb0\uc131 \uac80\uc99d \uc0c1\uc138"
+    },
+    "triggered_by": {
+      "type": "string",
+      "enum": [
+        "automation",
+        "manual"
+      ],
+      "description": "\uc2e4\ud589 \uc8fc\uccb4 (automation=\uc790\ub3d9, manual=\uad00\ub9ac\uc790 \uc218\ub3d9)"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "\uc218\ub3d9 \uc2e4\ud589 \uc2dc \uc2e4\ud589\uc790 \uacc4\uc815"
+    }
+  },
+  "required": [
+    "run_date",
+    "log_count"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "system"
+      }
+    },
+    "delete": false
+  }
+}

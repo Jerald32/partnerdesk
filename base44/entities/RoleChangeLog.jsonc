@@ -1,0 +1,135 @@
+{
+  "name": "RoleChangeLog",
+  "type": "object",
+  "properties": {
+    "target_user_id": {
+      "type": "string",
+      "description": "\uad8c\ud55c\uc774 \ubcc0\uacbd\ub41c \ub300\uc0c1 \uc0ac\uc6a9\uc790 ID"
+    },
+    "target_name": {
+      "type": "string",
+      "description": "\ub300\uc0c1 \uc0ac\uc6a9\uc790\uba85"
+    },
+    "target_email": {
+      "type": "string",
+      "description": "\ub300\uc0c1 \uc0ac\uc6a9\uc790 \uc774\uba54\uc77c"
+    },
+    "change_type": {
+      "type": "string",
+      "enum": [
+        "request_approved",
+        "direct"
+      ],
+      "description": "\ubcc0\uacbd \uacbd\ub85c (request_approved=\ub4f1\uae09 \uc694\uccad \uc2b9\uc778, direct=\uad00\ub9ac\uc790 \uc9c1\uc811 \ubcc0\uacbd)"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "\uc2e0\uccad \ub808\ucf54\ub4dc ID (RoleRequest)"
+    },
+    "requester_id": {
+      "type": "string",
+      "description": "\uc2e0\uccad\uc790 ID"
+    },
+    "requester_name": {
+      "type": "string",
+      "description": "\uc2e0\uccad\uc790\uba85"
+    },
+    "requester_email": {
+      "type": "string",
+      "description": "\uc2e0\uccad\uc790 \uc774\uba54\uc77c"
+    },
+    "requested_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uc2e0\uccad\uc77c\uc2dc"
+    },
+    "request_reason": {
+      "type": "string",
+      "description": "\uc2e0\uccad \uc0ac\uc720"
+    },
+    "role_before": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \uc804 \ub4f1\uae09"
+    },
+    "role_after": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \ud6c4 \ub4f1\uae09"
+    },
+    "org_type_before": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \uc804 \uc18c\uc18d\uc0ac \ub4f1\uae09"
+    },
+    "org_type_after": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \ud6c4 \uc18c\uc18d\uc0ac \ub4f1\uae09"
+    },
+    "affiliation_before": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \uc804 \uc18c\uc18d\uc0ac"
+    },
+    "affiliation_after": {
+      "type": "string",
+      "description": "\ubcc0\uacbd \ud6c4 \uc18c\uc18d\uc0ac"
+    },
+    "actor_id": {
+      "type": "string",
+      "description": "\uc2b9\uc778\uc790\u00b7\uc2e4\ud589\uc790 \uc0ac\uc6a9\uc790 ID"
+    },
+    "actor_name": {
+      "type": "string",
+      "description": "\uc2b9\uc778\uc790\u00b7\uc2e4\ud589\uc790\uba85"
+    },
+    "actor_email": {
+      "type": "string",
+      "description": "\uc2b9\uc778\uc790\u00b7\uc2e4\ud589\uc790 \uc774\uba54\uc77c"
+    },
+    "actor_role": {
+      "type": "string",
+      "description": "\uc2b9\uc778\uc790\u00b7\uc2e4\ud589\uc790 \ub4f1\uae09"
+    },
+    "actor_ip": {
+      "type": "string",
+      "description": "\uc2e4\ud589 \uc2dc \uc811\uc18d IP"
+    },
+    "source_api": {
+      "type": "string",
+      "description": "\uc2e4\ud589 \uacbd\ub85c (API\u00b7\uae30\ub2a5\uba85)"
+    },
+    "issue_reason": {
+      "type": "string",
+      "description": "\uc2b9\uc778\u00b7\ubc1c\uae09 \uc0ac\uc720 (\uad00\ub9ac\uc790 \uba54\ubaa8 \ud3ec\ud568)"
+    },
+    "changed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "\uad8c\ud55c \ubcc0\uacbd(\ubc1c\uae09) \uc77c\uc2dc"
+    }
+  },
+  "required": [
+    "target_user_id",
+    "change_type",
+    "changed_at"
+  ],
+  "rls": {
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  }
+}
