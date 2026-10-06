@@ -30,3 +30,4 @@ dist-ssr
 .env
 .vite
 !.env.example
+/supabase/.temp/

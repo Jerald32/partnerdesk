@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Ticket, Settings, Users, Building2,
@@ -6,7 +5,7 @@ import {
   Shield, UserCog, Ghost, Crown, ScrollText, ShieldCheck, History
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
 import { isGuest } from '@/lib/roles';
 
 const ROLE_CONFIG = {
@@ -30,11 +29,7 @@ const navItems = [
 
 export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () => {} }) {
   const location = useLocation();
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    base44.auth.me().then(setUser).catch(() => {});
-  }, []);
+  const { user, logout } = useAuth();
 
   const userRole = user?.role || 'guest';
   const roleConf = ROLE_CONFIG[userRole] || ROLE_CONFIG.guest;
@@ -73,7 +68,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
+        {navItems.filter((item) => item.path === '/' && !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
           const isActive = location.pathname === item.path || 
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const Icon = item.icon;
@@ -101,7 +96,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
       {/* My account link */}
       <div className="px-3 py-3 border-t border-border">
         <Link
-          to="/my"
+          to="/"
           onClick={onCloseMobileNav}
           className={cn(
             "flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors",
@@ -114,10 +109,11 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
             <CircleUser className="w-3.5 h-3.5" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs font-medium text-foreground truncate">내 계정</p>
+            <p className="text-xs font-medium text-foreground truncate">{user?.display_name || user?.full_name || user?.email}</p>
             <p className="text-[10px] text-muted-foreground truncate uppercase">{roleConf.label}</p>
           </div>
         </Link>
+        <button onClick={() => logout(true)} className="px-2 mt-2 text-xs text-muted-foreground hover:text-foreground">로그아웃</button>
       </div>
       </aside>
     </>

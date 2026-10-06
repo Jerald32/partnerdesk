@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/supabaseClient';
 
 const IDLE_LIMIT_MS = 15 * 60 * 1000; // 15분
 const WARNING_MS = 5 * 60 * 1000; // 5분 전 경고
@@ -17,12 +18,22 @@ export function useIdleTimeout() {
   const { toast } = useToast();
   const lastActivityRef = useRef(Date.now());
   const warningShownRef = useRef(false);
+  const lastTouchRef = useRef(0);
+  const touchingRef = useRef(false);
 
-  const updateActivity = () => {
+  const updateActivity = (event) => {
     const now = Date.now();
     lastActivityRef.current = now;
     warningShownRef.current = false;
     localStorage.setItem(STORAGE_KEY, String(now));
+    // Only actual input may touch the DB session, at most once per minute.
+    if (event?.isTrusted && !touchingRef.current && now - lastTouchRef.current >= 60000) {
+      touchingRef.current = true;
+      lastTouchRef.current = now;
+      void supabase.rpc('touch_app_session').then(({ error }) => {
+        if (error && ['28000', '42501', 'P0002'].includes(error.code)) void logout(true);
+      }).catch(() => {}).finally(() => { touchingRef.current = false; });
+    }
   };
 
   useEffect(() => {

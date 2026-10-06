@@ -1,15 +1,17 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
-import { clearAuthCache } from "@/lib/session";
+
 
 export default function Login() {
+  const { login, authError } = useAuth();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,9 +26,8 @@ export default function Login() {
     setLoading(true);
     try {
       // 이전 MFA·IP 세션 정리
-      clearAuthCache();
-      await base44.auth.loginViaEmailPassword(email, password);
-      window.location.href = "/mfa-verify";
+      await login(email, password);
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err.message || "Invalid email or password");
     } finally {
@@ -35,8 +36,7 @@ export default function Login() {
   };
 
   const handleGoogle = () => {
-    clearAuthCache();
-    base44.auth.loginWithProvider("google", "/mfa-verify");
+    setError("Google 로그인은 아직 연결되지 않았습니다. 이메일과 비밀번호로 로그인해 주세요.");
   };
 
   return (
@@ -86,9 +86,9 @@ export default function Login() {
         </div>
       </div>
 
-      {error && (
+      {(error || authError?.message) && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          {error}
+          {error || authError?.message}
         </div>
       )}
 

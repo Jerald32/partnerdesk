@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
 import { TrendingUp, Clock, AlertTriangle, CheckCircle2, ArrowUpRight, Ticket } from 'lucide-react';
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -26,15 +25,7 @@ export default function Dashboard() {
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    Promise.all([
-      base44.entities.Ticket.list('-created_date', 100),
-      base44.entities.Partner.list(),
-    ]).then(([t, p]) => {
-      setTickets(t);
-      setPartners(p);
-    }).finally(() => setLoading(false));
-  }, []);
+  // Business data remains disconnected until the next conversion step.
 
   const kpiData = {
     today: tickets.filter(t => isToday(new Date(t.created_date))).length,
@@ -65,6 +56,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
+      <div className="rounded-lg border border-border bg-card p-3 text-sm text-muted-foreground">Supabase 로그인 완료. 업무 데이터 연결은 준비 중입니다.</div>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {KPI_CARDS.map(card => {
@@ -142,7 +134,7 @@ export default function Dashboard() {
       <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">긴급 티켓</h3>
-          <button onClick={() => navigate('/tickets')} className="text-xs text-primary flex items-center gap-0.5 hover:underline">
+          <button disabled title="업무 데이터 연결 준비 중" onClick={() => navigate('/tickets')} className="text-xs text-primary flex items-center gap-0.5 hover:underline">
             전체 보기 <ArrowUpRight className="w-3 h-3" />
           </button>
         </div>
