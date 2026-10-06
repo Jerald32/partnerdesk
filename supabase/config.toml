@@ -1,0 +1,4 @@
+# JWT is verified inside app-auth with Auth.getUser on every POST action.
+# This also supports asymmetric user JWTs without the legacy gateway JWT check.
+[functions.app-auth]
+verify_jwt = false
