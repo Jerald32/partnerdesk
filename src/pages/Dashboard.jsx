@@ -1,6 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { invokeAppAuth } from '@/lib/appAuth';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Clock, AlertTriangle, CheckCircle2, ArrowUpRight, Ticket } from 'lucide-react';
+import { TrendingUp, AlertTriangle, CheckCircle2, ArrowUpRight, Ticket } from 'lucide-react';
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { format, isToday } from 'date-fns';
@@ -19,21 +22,71 @@ const PIE_COLORS = {
   done: '#10b981',
 };
 
+// Fetch every RLS-visible row rather than silently using the Data API row limit.
+async function readAllRows(createQuery, signal) {
+  const rows = [];
+  while (!signal.aborted) {
+    const { data, error, count } = await createQuery()
+      .range(rows.length, rows.length + 499).abortSignal(signal);
+    if (error) throw error;
+    if (!data?.length) return rows;
+    rows.push(...data);
+    if (count !== null && rows.length >= count) return rows;
+  }
+  return rows;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [tickets, setTickets] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // Business data remains disconnected until the next conversion step.
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    setTickets([]);
+    setPartners([]);
+
+    async function loadDashboard() {
+      try {
+        // Invalid app sessions can otherwise appear as empty SELECT results under RLS.
+        // Validation does not touch or extend the session.
+        await invokeAppAuth('validate-session');
+        if (controller.signal.aborted) return;
+        const [ticketRows, partnerRows] = await Promise.all([
+          readAllRows(() => supabase.from('tickets')
+            .select('id,title,created_at,status,priority,assigned_partner_organization_id', { count: 'exact' })
+            .order('created_at', { ascending: false }).order('id'), controller.signal),
+          readAllRows(() => supabase.from('organizations').select('id,name', { count: 'exact' })
+            .eq('type', 'partner').order('name').order('id'), controller.signal),
+        ]);
+        if (controller.signal.aborted) return;
+        setTickets(ticketRows);
+        setPartners(partnerRows);
+      } catch {
+        if (!controller.signal.aborted) {
+          setError('Dashboard 데이터를 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+
+    void loadDashboard();
+    return () => controller.abort();
+  }, [user?.id]);
 
   const kpiData = {
-    today: tickets.filter(t => isToday(new Date(t.created_date))).length,
+    today: tickets.filter(t => isToday(new Date(t.created_at))).length,
     inprogress: tickets.filter(t => t.status === 'inprogress').length,
     delayed: tickets.filter(t => {
       if (t.status === 'done') return false;
-      const hrs = (new Date() - new Date(t.created_date)) / 3600000;
-      return hrs > 24;
+      const hrs = (new Date() - new Date(t.created_at)) / 3600000;
+      return hrs >= 24;
     }).length,
     done: tickets.filter(t => t.status === 'done').length,
   };
@@ -44,8 +97,8 @@ export default function Dashboard() {
 
   const partnerPerf = partners.slice(0, 5).map(p => ({
     name: p.name.length > 8 ? p.name.slice(0, 8) + '…' : p.name,
-    active: tickets.filter(t => t.partner_id === p.id && t.status !== 'done').length,
-    done: tickets.filter(t => t.partner_id === p.id && t.status === 'done').length,
+    active: tickets.filter(t => t.assigned_partner_organization_id === p.id && t.status !== 'done').length,
+    done: tickets.filter(t => t.assigned_partner_organization_id === p.id && t.status === 'done').length,
   }));
 
   const urgentTickets = tickets
@@ -56,7 +109,7 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-lg border border-border bg-card p-3 text-sm text-muted-foreground">Supabase 로그인 완료. 업무 데이터 연결은 준비 중입니다.</div>
+      <div role="status" className="rounded-lg border border-border bg-card p-3 text-sm text-muted-foreground">{error || (loading ? 'Dashboard 데이터를 불러오는 중입니다.' : 'Supabase 업무 데이터 연결 완료.')}</div>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {KPI_CARDS.map(card => {
@@ -68,7 +121,7 @@ export default function Dashboard() {
                 <Icon className={`w-4 h-4 ${card.color}`} />
               </div>
               <div className={`text-2xl font-bold ${card.color}`}>
-                {loading ? '–' : kpiData[card.key]}
+                {loading || error ? '–' : kpiData[card.key]}
               </div>
             </div>
           );
@@ -159,7 +212,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="text-xs text-muted-foreground shrink-0">
-                  {format(new Date(ticket.created_date), 'MM/dd HH:mm')}
+                  {format(new Date(ticket.created_at), 'MM/dd HH:mm')}
                 </div>
               </div>
             ))}
