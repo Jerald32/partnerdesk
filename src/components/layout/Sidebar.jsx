@@ -68,7 +68,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => item.path === '/' && !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
+        {navItems.filter((item) => ['/', '/tickets'].includes(item.path) && !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
           const isActive = location.pathname === item.path || 
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const Icon = item.icon;

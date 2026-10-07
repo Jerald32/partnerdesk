@@ -28,12 +28,12 @@ export default function TicketMobileCard({ ticket, businesses = [], partners = [
           <span className="opacity-60">상호 </span>{ticket.customer_company || '–'}
           <span className="block opacity-60 truncate">{regionSummary(ticket.address)}</span>
         </div>
-        <div className="text-muted-foreground truncate"><span className="opacity-60">파트너 </span>{getPartnerName(ticket.partner_id)}</div>
-        <div className="text-muted-foreground truncate"><span className="opacity-60">담당자 </span>{ticket.operator_name || <span className="text-slate-400">미배정</span>}</div>
-        <div className="text-muted-foreground truncate"><span className="opacity-60">생성 </span>{format(new Date(ticket.created_date), 'MM/dd HH:mm')}</div>
+        <div className="text-muted-foreground truncate"><span className="opacity-60">파트너 </span>{getPartnerName(ticket.assigned_partner_organization_id)}</div>
+        <div className="text-muted-foreground truncate"><span className="opacity-60">담당자 </span>{ticket.operator_name_snapshot || <span className="text-slate-400">미배정</span>}</div>
+        <div className="text-muted-foreground truncate"><span className="opacity-60">생성 </span>{format(new Date(ticket.created_at), 'MM/dd HH:mm')}</div>
       </div>
       <div className="mt-2.5">
-        <SlaBar createdAt={ticket.created_date} slaHours={24} compact />
+        <SlaBar createdAt={ticket.created_at} slaHours={24} compact />
       </div>
     </div>
   );

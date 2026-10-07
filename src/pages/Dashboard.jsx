@@ -187,7 +187,7 @@ export default function Dashboard() {
       <div className="rounded-lg border border-border bg-card">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">긴급 티켓</h3>
-          <button disabled title="업무 데이터 연결 준비 중" onClick={() => navigate('/tickets')} className="text-xs text-primary flex items-center gap-0.5 hover:underline">
+          <button onClick={() => navigate('/tickets')} className="text-xs text-primary flex items-center gap-0.5 hover:underline">
             전체 보기 <ArrowUpRight className="w-3 h-3" />
           </button>
         </div>
