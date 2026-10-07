@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Send, Lock, MessageSquare, GitBranch, UserCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -18,27 +16,21 @@ const TYPE_COLORS = {
   assignment: 'text-purple-400',
 };
 
-export default function ActivityFeed({ ticketId, activities, onRefresh, userRole = 'admin', requestDetail, requestType }) {
-  const [content, setContent] = useState('');
+export default function ActivityFeed({ activities, userRole, requestDetail, requestType, disabled = false, onSubmit }) {
   const [isInternal, setIsInternal] = useState(false);
+  const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
-
-  const handleSend = async () => {
-    if (!content.trim()) return;
+  const pending = useRef(false);
+  const canNote = ['admin', 'operator'].includes(userRole);
+  const canWrite = ['admin', 'operator', 'partner_admin'].includes(userRole) && Boolean(onSubmit);
+  async function send() {
+    if (pending.current || disabled || !canWrite || !content.trim()) return;
+    pending.current = true;
     setSending(true);
-    await base44.entities.Activity.create({
-      ticket_id: ticketId,
-      type: isInternal ? 'note' : 'comment',
-      content: content.trim(),
-      is_internal: isInternal,
-      user_name: 'Current User',
-      user_role: userRole,
-    });
-    setContent('');
-    setSending(false);
-    onRefresh();
-  };
-
+    try {
+      if (await onSubmit(isInternal && canNote ? 'note' : 'comment', content.trim())) setContent('');
+    } finally { pending.current = false; setSending(false); }
+  }
   return (
     <div className="flex flex-col h-full">
       {/* Input (상단) */}
@@ -55,9 +47,10 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
             <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{requestDetail}</p>
           </div>
         )}
-        {userRole !== 'partner' && (
+        {['admin', 'operator'].includes(userRole) && (
           <div className="flex items-center gap-2 mb-2">
             <button
+              disabled={disabled || sending}
               onClick={() => setIsInternal(false)}
               className={cn("text-xs px-3 py-1.5 rounded-md transition-colors",
                 !isInternal ? "bg-primary/20 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -66,6 +59,7 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
               댓글
             </button>
             <button
+              disabled={disabled || sending}
               onClick={() => setIsInternal(true)}
               className={cn("flex items-center gap-1 text-xs px-3 py-1.5 rounded-md transition-colors",
                 isInternal ? "bg-orange-500/20 text-orange-400 font-medium" : "text-muted-foreground hover:text-foreground hover:bg-accent"
@@ -77,10 +71,11 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
         )}
         <div className="flex gap-2">
           <textarea
+            disabled={disabled || sending || !canWrite}
             value={content}
-            onChange={e => setContent(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend(); }}
-            placeholder={isInternal ? "내부 노트 (파트너에게 비공개)..." : "댓글을 입력하세요... (Ctrl+Enter로 전송)"}
+            onChange={event => setContent(event.target.value)}
+            onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }}
+            placeholder={isInternal && canNote ? '내부 노트 (파트너에게 비공개)...' : '댓글을 입력하세요... (Ctrl+Enter로 전송)'}
             rows={4}
             className={cn(
               "flex-1 px-3 py-2.5 text-sm border rounded-md resize-none focus:outline-none focus:ring-1 focus:ring-ring",
@@ -90,8 +85,8 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
             )}
           />
           <button
-            onClick={handleSend}
-            disabled={!content.trim() || sending}
+            disabled={disabled || sending || !canWrite || !content.trim()}
+            onClick={send}
             className="h-11 w-11 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 self-end"
           >
             <Send className="w-4 h-4" />
@@ -118,7 +113,7 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
                   </div>
                   <div className="w-5 h-px bg-border flex-1" />
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                    {format(new Date(act.created_date), 'MM/dd HH:mm')}
+                    {format(new Date(act.created_at), 'MM/dd HH:mm')}
                   </span>
                 </div>
               );
@@ -128,21 +123,21 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
               <div key={act.id} className={cn("flex gap-2.5", act.is_internal && "opacity-80")}>
                 <div className={cn(
                   "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5",
-                  act.user_role === 'admin' ? "bg-primary/30 text-primary" :
-                  act.user_role === 'operator' ? "bg-orange-500/30 text-orange-400" :
+                  act.actor_role_snapshot === 'admin' ? "bg-primary/30 text-primary" :
+                  act.actor_role_snapshot === 'operator' ? "bg-orange-500/30 text-orange-400" :
                   "bg-emerald-500/30 text-emerald-400"
                 )}>
-                  {act.user_name?.[0]?.toUpperCase() || 'U'}
+                  {act.actor_name_snapshot?.[0]?.toUpperCase() || 'U'}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xs font-medium text-foreground">{act.user_name || 'Unknown'}</span>
+                    <span className="text-xs font-medium text-foreground">{act.actor_name_snapshot || 'Unknown'}</span>
                     <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium",
-                      act.user_role === 'admin' ? "bg-primary/15 text-primary" :
-                      act.user_role === 'operator' ? "bg-orange-500/15 text-orange-400" :
+                      act.actor_role_snapshot === 'admin' ? "bg-primary/15 text-primary" :
+                      act.actor_role_snapshot === 'operator' ? "bg-orange-500/15 text-orange-400" :
                       "bg-emerald-500/15 text-emerald-400"
                     )}>
-                      {act.user_role}
+                      {act.actor_role_snapshot}
                     </span>
                     {act.is_internal && (
                       <span className="flex items-center gap-0.5 text-[10px] text-orange-400 bg-orange-500/10 px-1.5 py-0.5 rounded">
@@ -150,7 +145,7 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
                       </span>
                     )}
                     <span className="text-[10px] text-muted-foreground ml-auto">
-                      {format(new Date(act.created_date), 'MM/dd HH:mm')}
+                      {format(new Date(act.created_at), 'MM/dd HH:mm')}
                     </span>
                   </div>
                   <div className={cn(
@@ -168,3 +163,4 @@ export default function ActivityFeed({ ticketId, activities, onRefresh, userRole
     </div>
   );
 }
+import { useState, useRef } from 'react';

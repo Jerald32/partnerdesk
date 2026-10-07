@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
-import { isPartnerRole } from '@/lib/roles';
-import { ArrowLeft, Paperclip, User, Building2, Tag, Calendar, Clock, UserCheck, Eye, Store } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { invokeAppAuth } from '@/lib/appAuth';
+import { ArrowLeft, User, Building2, Tag, Calendar, Clock, UserCheck, Eye, Store } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge';
@@ -11,159 +12,175 @@ import StatusTransitionBar from '@/components/tickets/StatusTransitionBar';
 import ActivityFeed from '@/components/tickets/ActivityFeed';
 import TicketAddressCard from '@/components/tickets/TicketAddressCard';
 import { format } from 'date-fns';
-import { buildTicketVisibilityFilter } from '@/lib/ticketVisibility';
-import { maskName, maskPhone, regionSummary } from '@/lib/mask';
-import { logAccess } from '@/lib/accessLog';
 
 export default function TicketDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { user: currentUser } = useAuth();
+  const isOperator = ['admin', 'operator'].includes(currentUser?.role);
+  const [error, setError] = useState(null);
+  const [loadedId, setLoadedId] = useState(null);
   const [ticket, setTicket] = useState(null);
   const [activities, setActivities] = useState([]);
   const [businesses, setBusinesses] = useState([]);
   const [partners, setPartners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showViewHistory, setShowViewHistory] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState(false);
+  const writing = useRef(false);
+  const generation = useRef(0);
 
-  const loadTicket = async () => {
-    const [me, tickets, acts, bizs, parts, sps] = await Promise.all([
-      base44.auth.me(),
-      base44.entities.Ticket.list(),
-      base44.entities.Activity.filter({ ticket_id: id }, '-created_date'),
-      base44.entities.Business.list(),
-      base44.entities.Partner.list(),
-      base44.entities.ServicePartner.list(),
-    ]);
-    setCurrentUser(me);
-    const t = tickets.find(t => t.id === id);
-    // Partner 역할 + 파트너사 소속: 관계 기반 가시성 검증 (비즈니스파트너=해당 비즈니스 전체, 서비스파트너=할당된 티켓)
-    if (isPartnerRole(me) && t) {
-      const visibilityFilter = buildTicketVisibilityFilter(me, parts, sps);
-      if (visibilityFilter && !visibilityFilter(t)) {
-        navigate('/tickets');
-        return;
+  useEffect(() => {
+    const controller = new AbortController();
+    const version = ++generation.current;
+    setSaving(false);
+    setLoading(true);
+    setError(null);
+    setTicket(null);
+    setActivities([]);
+    setBusinesses([]);
+    setPartners([]);
+    setShowViewHistory(false);
+    async function loadTicket() {
+      try {
+        if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '')) {
+          setError('올바른 티켓 주소가 아닙니다.');
+          return;
+        }
+        await invokeAppAuth('validate-session');
+        if (controller.signal.aborted) return;
+        const { data: row, error: ticketError } = await supabase.from('tickets')
+          .select('id,title,description,request_type,request_detail,business_id,customer_name,customer_company,customer_contact,address,address_detail,status,priority,operator_profile_id,operator_name_snapshot,assigned_partner_organization_id,created_at,resolved_at,version,retention_state')
+          .eq('id', id).abortSignal(controller.signal).maybeSingle();
+        if (ticketError) throw ticketError;
+        if (controller.signal.aborted || !row) return;
+        async function readActivities() {
+          const rows = [];
+          while (!controller.signal.aborted) {
+            const { data, error: activityError, count } = await supabase.from('activities')
+              .select('id,ticket_id,actor_profile_id,actor_name_snapshot,actor_role_snapshot,type,content,is_internal,created_at', { count: 'exact' })
+              .eq('ticket_id', row.id).order('created_at', { ascending: false }).order('id')
+              .range(rows.length, rows.length + 499).abortSignal(controller.signal);
+            if (activityError) throw activityError;
+            if (!data?.length) break;
+            rows.push(...data);
+            if (count !== null && rows.length >= count) break;
+          }
+          return rows;
+        }
+        async function readPartners() {
+          const relations = [];
+          while (!controller.signal.aborted) {
+            const { data, error: relationError, count } = await supabase.from('service_partners')
+              .select('id,partner_organization_id', { count: 'exact' }).eq('business_id', row.business_id)
+              .order('id').range(relations.length, relations.length + 499).abortSignal(controller.signal);
+            if (relationError) throw relationError;
+            if (!data?.length) break;
+            relations.push(...data);
+            if (count !== null && relations.length >= count) break;
+          }
+          const ids = [...new Set([...relations.map(r => r.partner_organization_id), row.assigned_partner_organization_id].filter(Boolean))];
+          const organizations = [];
+          for (let offset = 0; offset < ids.length; offset += 100) {
+            const { data, error: organizationError } = await supabase.from('organizations').select('id,name')
+              .eq('type', 'partner').in('id', ids.slice(offset, offset + 100)).order('name').abortSignal(controller.signal);
+            if (organizationError) throw organizationError;
+            organizations.push(...data);
+          }
+          return { data: organizations, relationIds: new Set(relations.map(r => r.partner_organization_id)) };
+        }
+        const [businessResult, partnerResult, activityRows] = await Promise.all([
+          supabase.from('businesses').select('id,name').eq('id', row.business_id)
+            .abortSignal(controller.signal).maybeSingle(),
+          readPartners(),
+          readActivities(),
+        ]);
+        if (businessResult.error) throw businessResult.error;
+        if (controller.signal.aborted) return;
+        setTicket(row);
+        setBusinesses(businessResult.data ? [businessResult.data] : []);
+        setPartners(partnerResult.data.map(p => ({ ...p, selectable: partnerResult.relationIds.has(p.id) })));
+        setActivities(activityRows);
+      } catch (failure) {
+        if (!controller.signal.aborted) {
+          setError(failure.reason || failure.code === '28000'
+            ? '로그인 세션을 확인할 수 없습니다. 다시 로그인해 주세요.'
+            : '티켓을 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoadedId(id);
+          setLoading(false);
+        }
       }
     }
-    setTicket(t || null);
-    setActivities(acts);
-    setBusinesses(bizs);
-    setPartners(parts);
-    setLoading(false);
+    void loadTicket();
+    return () => { controller.abort(); if (generation.current === version) ++generation.current; };
+  }, [id, currentUser?.id, refreshCounter]);
 
-    // 미배정 티켓을 operator가 처음 열면 자동 배정
-    if (t && me && !t.operator_id && me.role === 'operator') {
-      const opName = me.full_name || me.email;
-      await base44.entities.Ticket.update(id, { operator_id: me.id, operator_name: opName });
-      await base44.entities.Activity.create({
-        ticket_id: id,
-        user_id: me.id,
-        user_name: opName,
-        user_role: me.role,
-        type: 'assignment',
-        content: `담당자 자동 배정: ${opName}`,
-        is_internal: false,
-      });
-      setTicket({ ...t, operator_id: me.id, operator_name: opName });
+  async function mutateTicket(rpc, args) {
+    if (writing.current || loading || loadedId !== id || !ticket || ticket.retention_state === 'anonymized') return false;
+    writing.current = true;
+    const version = generation.current;
+    setSaving(true);
+    setNotice('');
+    try {
+      const { data, error: rpcError } = await supabase.rpc(rpc, args);
+      if (rpcError) throw rpcError;
+      const validId = typeof data?.id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data.id);
+      if (!validId || (rpc === 'add_ticket_activity'
+        ? data.ticket_id !== ticket.id || data.type !== args.p_type || data.is_internal !== (args.p_type === 'note') || !Number.isFinite(Date.parse(data.created_at))
+        : data.id !== ticket.id || data.version !== ticket.version + 1 ||
+          (rpc === 'change_ticket_status' ? data.status !== args.p_status : data.assigned_partner_organization_id !== args.p_assigned_partner_organization_id))) {
+        throw new Error('invalid_rpc_response');
+      }
+      if (generation.current !== version) return true;
+      setNotice('저장되었습니다.');
+      setRefreshCounter(value => value + 1);
+      return true;
+    } catch (failure) {
+      if (generation.current !== version) return false;
+      if (failure.code === '40001') {
+        setNotice('다른 변경으로 데이터가 갱신되었습니다. 최신 내용을 확인한 뒤 다시 시도해 주세요.');
+        setRefreshCounter(value => value + 1);
+      } else if (!failure.code) {
+        setNotice('처리 결과를 확인할 수 없습니다. 자동 재시도하지 않습니다. 최신 기록을 확인해 주세요.');
+        setRefreshCounter(value => value + 1);
+      } else {
+        setNotice('저장하지 못했습니다. 세션, 접근 권한과 입력값을 확인해 주세요.');
+      }
+      return false;
+    } finally {
+      writing.current = false;
+      if (generation.current === version) setSaving(false);
     }
+  }
 
-    // 조회 감사 로그 기록
-    if (t && me) {
-      await base44.entities.Activity.create({
-        ticket_id: id,
-        user_id: me.id,
-        user_name: me.full_name || me.email,
-        user_role: me.role,
-        type: 'view',
-        content: `[조회] ${me.full_name || me.email} (${me.role}) 님이 티켓을 조회했습니다.`,
-        is_internal: true,
-      });
-
-      // 접속기록: 개인정보(고객명·연락처·주소) 처리
-      logAccess({
-        action: '조회',
-        target_type: '티켓 상세',
-        target_id: id,
-        subject_info: `${t.customer_name ? maskName(t.customer_name) : '고객명 없음'} · ${maskPhone(t.customer_contact)} · ${regionSummary(t.address)}`,
-        detail: '티켓 상세 화면 접속 (고객 개인정보 열람)',
-      });
-    }
-  };
-
-  const handleToggleAssign = async () => {
-    if (!ticket || !currentUser) return;
-    const isMine = ticket.operator_id === currentUser.id;
-    if (isMine) {
-      await base44.entities.Ticket.update(id, { operator_id: '', operator_name: '' });
-      await base44.entities.Activity.create({
-        ticket_id: id,
-        user_id: currentUser.id,
-        user_name: currentUser.full_name || currentUser.email,
-        user_role: currentUser.role,
-        type: 'assignment',
-        content: `담당자 배정 해제`,
-        is_internal: false,
-      });
-      setTicket({ ...ticket, operator_id: '', operator_name: '' });
-    } else {
-      const opName = currentUser.full_name || currentUser.email;
-      await base44.entities.Ticket.update(id, { operator_id: currentUser.id, operator_name: opName });
-      await base44.entities.Activity.create({
-        ticket_id: id,
-        user_id: currentUser.id,
-        user_name: opName,
-        user_role: currentUser.role,
-        type: 'assignment',
-        content: `담당자 배정: ${opName}`,
-        is_internal: false,
-      });
-      setTicket({ ...ticket, operator_id: currentUser.id, operator_name: opName });
-    }
-  };
-
-  useEffect(() => { loadTicket(); }, [id]);
-
-  const handleStatusChange = async (newStatus) => {
-    const oldStatus = ticket.status;
-    await base44.entities.Ticket.update(id, { status: newStatus, ...(newStatus === 'done' ? { resolved_at: new Date().toISOString() } : {}) });
-    await base44.entities.Activity.create({
-      ticket_id: id,
-      type: 'status_change',
-      content: `상태 변경: ${statusLabel[oldStatus]} → ${statusLabel[newStatus]}`,
-      is_internal: false,
-      user_name: 'Current User',
-      user_role: 'admin',
-    });
-    loadTicket();
-  };
-
-  const handlePartnerChange = async (partnerId) => {
-    await base44.entities.Ticket.update(id, { partner_id: partnerId });
-    await base44.entities.Activity.create({
-      ticket_id: id,
-      type: 'assignment',
-      content: `파트너 배정: ${partners.find(p => p.id === partnerId)?.name || '–'}`,
-      is_internal: false,
-      user_name: 'Current User',
-      user_role: 'admin',
-    });
-    loadTicket();
-  };
-
-  const statusLabel = { new: '신규', inprogress: '진행중', hold: '보류', done: '완료' };
-
-  if (loading) return (
+  if (loading || loadedId !== id) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
+  if (error) return (
+    <div role="alert" className="text-center py-16 text-muted-foreground space-y-3">
+      {notice && <p>{notice}</p>}
+      <p>{error}</p>
+      <button onClick={() => navigate('/tickets')} className="text-primary text-sm">티켓 목록으로 돌아가기</button>
+    </div>
+  );
+
   if (!ticket) return (
-    <div className="text-center py-16 text-muted-foreground">티켓을 찾을 수 없습니다</div>
+    <div className="text-center py-16 text-muted-foreground space-y-3">
+      <p>티켓을 찾을 수 없거나 접근 권한이 없습니다.</p>
+      <button onClick={() => navigate('/tickets')} className="text-primary text-sm">티켓 목록으로 돌아가기</button>
+    </div>
   );
 
   const business = businesses.find(b => b.id === ticket.business_id);
-  const partner = partners.find(p => p.id === ticket.partner_id);
+  const partner = partners.find(p => p.id === ticket.assigned_partner_organization_id);
 
   return (
     <div className="space-y-4">
@@ -173,11 +190,12 @@ export default function TicketDetail() {
           <ArrowLeft className="w-4 h-4 text-muted-foreground" />
         </button>
         <span className="text-xs font-mono text-muted-foreground">#{id?.slice(-6)}</span>
-        {!isPartnerRole(currentUser) && (
-          <StatusTransitionBar currentStatus={ticket.status} onTransition={handleStatusChange} />
+        {['admin', 'operator', 'partner_admin'].includes(currentUser?.role) && (
+          <StatusTransitionBar currentStatus={ticket.status} disabled={saving || ticket.retention_state === 'anonymized'}
+            onTransition={status => mutateTicket('change_ticket_status', { p_ticket_id: ticket.id, p_status: status, p_expected_version: ticket.version })} />
         )}
-        {isPartnerRole(currentUser?.role) && <StatusBadge status={ticket.status} />}
       </div>
+      {notice && <div role="status" className="text-sm text-muted-foreground">{notice}</div>}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         {/* Left - 티켓 정보 (상단) → SLA (하단) */}
@@ -189,23 +207,7 @@ export default function TicketDetail() {
               <StatusBadge status={ticket.status} />
               <PriorityBadge priority={ticket.priority} />
             </div>
-            {/* Attachments */}
-            {ticket.attachments?.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
-                  <Paperclip className="w-3.5 h-3.5" /> 첨부파일
-                </h4>
-                <div className="flex flex-wrap gap-2">
-                  {ticket.attachments.map((att, i) => (
-                    <a key={i} href={att.url} target="_blank" rel="noreferrer"
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-accent hover:bg-border text-xs text-foreground transition-colors">
-                      <Paperclip className="w-3 h-3 text-muted-foreground" />
-                      {att.name}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
+
           </div>
 
           {/* 티켓 정보 */}
@@ -216,36 +218,43 @@ export default function TicketDetail() {
             <MetaRow icon={User} label="고객명" value={ticket.customer_name || '–'} />
             <MetaRow icon={Store} label="상호" value={ticket.customer_company || '–'} />
             <MetaRow icon={Tag} label="연락처" value={ticket.customer_contact || '–'} />
-            <MetaRow icon={UserCheck} label="담당자" value={ticket.operator_name || '미배정'} />
-            <MetaRow icon={Calendar} label="생성일" value={format(new Date(ticket.created_date), 'yyyy/MM/dd HH:mm')} />
+            <MetaRow icon={Building2} label="파트너" value={partner?.name || '–'} />
+            <MetaRow icon={UserCheck} label="담당자" value={ticket.operator_name_snapshot || '미배정'} />
+            <MetaRow icon={Calendar} label="생성일" value={format(new Date(ticket.created_at), 'yyyy/MM/dd HH:mm')} />
             {ticket.resolved_at && (
               <MetaRow icon={Clock} label="완료일" value={format(new Date(ticket.resolved_at), 'yyyy/MM/dd HH:mm')} />
             )}
 
             {/* 담당자 배정 토글 - admin/operator only */}
-            {!isPartnerRole(currentUser) && (
+            {isOperator && (
               <div className="pt-2 border-t border-border">
                 <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-xs font-medium text-muted-foreground">나에게 배정</span>
+                  <span className="text-xs font-medium text-muted-foreground">나에게 배정 (준비 중)</span>
                   <Switch
-                    checked={ticket.operator_id === currentUser.id}
-                    onCheckedChange={handleToggleAssign}
+                    checked={ticket.operator_profile_id === currentUser.id}
+                    disabled
                   />
                 </label>
               </div>
             )}
 
             {/* Partner assignment - admin/operator only */}
-            {!isPartnerRole(currentUser) && (
+            {isOperator && (
               <div className="pt-2 border-t border-border">
                 <label className="text-xs font-medium text-muted-foreground block mb-1.5">파트너 배정</label>
                 <select
-                  value={ticket.partner_id || ''}
-                  onChange={e => handlePartnerChange(e.target.value)}
+                  value={ticket.assigned_partner_organization_id || ''}
+                  disabled={saving || ticket.retention_state === 'anonymized'}
+                  onChange={event => mutateTicket('change_ticket_assignment', {
+                    p_ticket_id: ticket.id, p_assigned_partner_organization_id: event.target.value || null, p_expected_version: ticket.version,
+                  })}
                   className="w-full h-7 px-2.5 text-xs bg-accent border border-border rounded-md text-foreground focus:outline-none focus:ring-1 focus:ring-ring appearance-none cursor-pointer"
                 >
                   <option value="">파트너 미배정</option>
-                  {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {ticket.assigned_partner_organization_id && !partner && (
+                    <option value={ticket.assigned_partner_organization_id}>조회 가능한 파트너 정보 없음</option>
+                  )}
+                  {partners.map(p => <option disabled={!p.selectable} key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
             )}
@@ -254,8 +263,6 @@ export default function TicketDetail() {
           {/* 현장 지원 출동 주소 */}
           <TicketAddressCard
             ticket={ticket}
-            editable={!isPartnerRole(currentUser)}
-            onSaved={loadTicket}
           />
 
           {/* 고객 요청사항 / 설명 */}
@@ -279,7 +286,7 @@ export default function TicketDetail() {
           {/* SLA 현황 */}
           <div className="rounded-lg border border-border bg-card p-4">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">SLA 현황</h4>
-            <SlaBar createdAt={ticket.created_date} slaHours={24} />
+            <SlaBar createdAt={ticket.created_at} slaHours={24} />
           </div>
         </div>
 
@@ -309,7 +316,7 @@ export default function TicketDetail() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-foreground leading-tight">{act.content}</p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
-                        {format(new Date(act.created_date), 'MM/dd HH:mm')}
+                        {format(new Date(act.created_at), 'MM/dd HH:mm')}
                       </p>
                     </div>
                   </div>
@@ -330,7 +337,7 @@ export default function TicketDetail() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-muted-foreground leading-tight">{act.content}</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            {format(new Date(act.created_date), 'MM/dd HH:mm')}
+                            {format(new Date(act.created_at), 'MM/dd HH:mm')}
                           </p>
                         </div>
                       </div>
@@ -349,10 +356,11 @@ export default function TicketDetail() {
             </h3>
             <div className="flex-1 overflow-hidden">
               <ActivityFeed
-                ticketId={id}
+                key={ticket.id}
                 activities={activities.filter(a => a.type === 'comment' || a.type === 'note')}
-                onRefresh={loadTicket}
-                userRole="admin"
+                userRole={currentUser?.role}
+                disabled={saving || ticket.retention_state === 'anonymized'}
+                onSubmit={(type, content) => mutateTicket('add_ticket_activity', { p_ticket_id: ticket.id, p_type: type, p_content: content })}
               />
             </div>
           </div>
