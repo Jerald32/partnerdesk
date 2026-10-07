@@ -12,6 +12,14 @@ import Dashboard from '@/pages/Dashboard';
 import TicketList from '@/pages/TicketList';
 import TicketDetail from '@/pages/TicketDetail';
 import BusinessList from '@/pages/BusinessList';
+import BusinessDetail from '@/pages/BusinessDetail';
+import PartnerList from '@/pages/PartnerList';
+import PartnerDetail from '@/pages/PartnerDetail';
+import UserManagement from '@/pages/UserManagement';
+import Notifications from '@/pages/Notifications';
+import Account from '@/pages/Account';
+import SystemSettings from '@/pages/SystemSettings';
+import AdminAudit from '@/pages/AdminAudit';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 
 function Layout() {
@@ -42,7 +50,16 @@ export default function App() {
           <Route path="/tickets" element={<TicketList />} />
           <Route path="/tickets/:id" element={<TicketDetail />} />
           <Route path="/businesses" element={<BusinessList />} />
-          <Route path="/businesses/:id" element={<Unavailable />} />
+          <Route path="/businesses/:id" element={<BusinessDetail />} />
+          <Route path="/partners" element={<PartnerList />} />
+          <Route path="/partners/:id" element={<PartnerDetail />} />
+          <Route path="/users" element={<UserManagement />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route path="/my" element={<Account />} />
+          <Route path="/settings" element={<SystemSettings />} />
+          <Route path="/access-logs" element={<AdminAudit key="access" kind="access" />} />
+          <Route path="/role-change-logs" element={<AdminAudit key="role" kind="role" />} />
+          <Route path="/data-deletion-logs" element={<AdminAudit key="deletion" kind="deletion" />} />
           <Route path="*" element={<Unavailable />} />
         </Route>
       </Route>

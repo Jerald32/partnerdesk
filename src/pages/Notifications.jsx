@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { invokeAppAuth } from '@/lib/appAuth';
+import { readRows } from '@/lib/supabaseData';
+import { useRpcAction } from '@/hooks/useRpcAction';
 import { Bell, AlertTriangle, AlertCircle, CheckCircle2, MessageSquare, UserCheck, Check } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -18,25 +22,22 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const load = async () => {
-    const user = await base44.auth.me();
-    const notifs = await base44.entities.Notification.filter({ user_id: user.id }, '-created_date', 50);
-    setNotifications(notifs);
-    setLoading(false);
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const markRead = async (notifId) => {
-    await base44.entities.Notification.update(notifId, { is_read: true });
-    setNotifications(ns => ns.map(n => n.id === notifId ? { ...n, is_read: true } : n));
-  };
-
-  const markAllRead = async () => {
-    const unread = notifications.filter(n => !n.is_read);
-    await Promise.all(unread.map(n => base44.entities.Notification.update(n.id, { is_read: true })));
-    setNotifications(ns => ns.map(n => ({ ...n, is_read: true })));
-  };
+  const { user } = useAuth();
+  const [refresh,setRefresh] = useState(0);
+  const [loadError,setLoadError] = useState('');
+  const {run,busy,error,unknown} = useRpcAction(()=>setRefresh(v=>v+1));
+  useEffect(()=>{
+    const controller=new AbortController();setLoading(true);setLoadError('');
+    async function load(){try{
+      await invokeAppAuth('validate-session');if(controller.signal.aborted)return;
+      const rows=await readRows(()=>supabase.from('notifications').select('id,ticket_id,type,message,is_read,created_at',{count:'exact'}).eq('recipient_profile_id',user.id).order('created_at',{ascending:false}).order('id'),controller.signal);
+      if(!controller.signal.aborted)setNotifications(rows);
+    }catch{if(!controller.signal.aborted)setLoadError('알림을 조회하지 못했습니다. 세션과 권한을 확인해 주세요.');}
+    finally{if(!controller.signal.aborted)setLoading(false);}}
+    void load();return()=>controller.abort();
+  },[user.id,refresh]);
+  const markRead = id => run('mark_notifications_read',{p_notification_id:id},data=>Number.isInteger(data?.count)&&data.count>=0);
+  const markAllRead = () => markRead(null);
 
   const unreadCount = notifications.filter(n => !n.is_read).length;
 
@@ -51,6 +52,7 @@ export default function Notifications() {
         </div>
         {unreadCount > 0 && (
           <button
+            disabled={busy || unknown || loading}
             onClick={markAllRead}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
@@ -59,6 +61,7 @@ export default function Notifications() {
         )}
       </div>
 
+      {(loadError || error) && <p role="alert" className="text-xs text-destructive">{loadError || error}</p>}
       <div className="rounded-lg border border-border bg-card divide-y divide-border overflow-hidden">
         {loading ? (
           Array(5).fill(0).map((_, i) => (
@@ -87,7 +90,8 @@ export default function Notifications() {
                   notif.is_read ? "hover:bg-accent/50" : "bg-primary/5 hover:bg-primary/10"
                 )}
                 onClick={() => {
-                  markRead(notif.id);
+                  if (busy || unknown) return;
+                  if (!notif.is_read) void markRead(notif.id);
                   if (notif.ticket_id) navigate(`/tickets/${notif.ticket_id}`);
                 }}
               >
@@ -107,7 +111,7 @@ export default function Notifications() {
                   </div>
                   <p className="text-sm text-foreground mt-1">{notif.message}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {format(new Date(notif.created_date), 'yyyy/MM/dd HH:mm')}
+                    {format(new Date(notif.created_at), 'yyyy/MM/dd HH:mm')}
                   </p>
                 </div>
               </div>

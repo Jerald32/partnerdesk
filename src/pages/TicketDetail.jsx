@@ -133,7 +133,11 @@ export default function TicketDetail() {
       if (!validId || (rpc === 'add_ticket_activity'
         ? data.ticket_id !== ticket.id || data.type !== args.p_type || data.is_internal !== (args.p_type === 'note') || !Number.isFinite(Date.parse(data.created_at))
         : data.id !== ticket.id || data.version !== ticket.version + 1 ||
-          (rpc === 'change_ticket_status' ? data.status !== args.p_status : data.assigned_partner_organization_id !== args.p_assigned_partner_organization_id))) {
+          (rpc === 'change_ticket_status' ? data.status !== args.p_status
+            : rpc === 'change_ticket_assignment' ? data.assigned_partner_organization_id !== args.p_assigned_partner_organization_id
+            : rpc === 'change_ticket_operator' ? data.operator_profile_id !== (args.p_assign_to_me ? currentUser.id : null)
+            : rpc === 'update_ticket_address' ? data.address !== (args.p_address?.trim() || null) || data.address_detail !== (args.p_address_detail?.trim() || null)
+            : true))) {
         throw new Error('invalid_rpc_response');
       }
       if (generation.current !== version) return true;
@@ -229,12 +233,16 @@ export default function TicketDetail() {
             {isOperator && (
               <div className="pt-2 border-t border-border">
                 <label className="flex items-center justify-between cursor-pointer">
-                  <span className="text-xs font-medium text-muted-foreground">나에게 배정 (준비 중)</span>
+                  <span className="text-xs font-medium text-muted-foreground">나에게 배정</span>
                   <Switch
                     checked={ticket.operator_profile_id === currentUser.id}
-                    disabled
+                    disabled={saving || ticket.retention_state === 'anonymized' || (ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id && currentUser.role !== 'admin')}
+                    onCheckedChange={assign => mutateTicket('change_ticket_operator', { p_ticket_id: ticket.id, p_assign_to_me: assign, p_expected_version: ticket.version })}
                   />
                 </label>
+                {currentUser.role === 'admin' && ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id &&
+                  <button disabled={saving || ticket.retention_state === 'anonymized'} className="mt-2 text-xs text-primary"
+                    onClick={() => mutateTicket('change_ticket_operator', { p_ticket_id: ticket.id, p_assign_to_me: false, p_expected_version: ticket.version })}>담당자 해제</button>}
               </div>
             )}
 
@@ -262,7 +270,12 @@ export default function TicketDetail() {
 
           {/* 현장 지원 출동 주소 */}
           <TicketAddressCard
+            key={ticket.id}
             ticket={ticket}
+            editable={isOperator}
+            disabled={saving || ticket.retention_state === 'anonymized'}
+            onSave={value => mutateTicket('update_ticket_address', { p_ticket_id: ticket.id, p_address: value.address || null,
+              p_address_detail: value.address_detail || null, p_expected_version: ticket.version })}
           />
 
           {/* 고객 요청사항 / 설명 */}

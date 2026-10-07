@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useRpcAction } from '@/hooks/useRpcAction';
 import { useAuth } from '@/lib/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,38 +20,14 @@ const PLEDGE_TEXT = `개인정보보호 서약서
 본 서약을 위반할 경우, 관련 법령에 따라 민·형사상 책임을 질 수 있음을 인지하고 있습니다.`;
 
 export default function PrivacyConsent() {
-  const { user } = useAuth();
+  const { checkUserAuth, logout } = useAuth();
   const [agreed, setAgreed] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const { run, busy: loading, error, unknown } = useRpcAction(() => { void checkUserAuth(); });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!agreed) {
-      setError('서약서 내용에 동의해주세요.');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const now = new Date();
-      const validUntil = new Date(now);
-      validUntil.setFullYear(validUntil.getFullYear() + 1);
-      await base44.entities.PrivacyConsent.create({
-        user_id: user.id,
-        user_name: user.display_name || user.full_name || user.email,
-        user_email: user.email,
-        company: user.affiliation || '',
-        consent_date: now.toISOString(),
-        valid_until: validUntil.toISOString().split('T')[0],
-        pledge_version: 'v1.0',
-      });
-      window.location.href = '/';
-    } catch (err) {
-      setError(err?.message || '서약서 제출 실패');
-    } finally {
-      setLoading(false);
-    }
+    if (!agreed) return;
+    void run('record_privacy_consent', { p_agreed: true }, data => typeof data?.id === 'string' && data.consent_type === 'privacy_pledge' && typeof data.pledge_version === 'string');
   };
 
   return (
@@ -83,7 +59,7 @@ export default function PrivacyConsent() {
           </label>
         </div>
 
-        <Button type="submit" className="w-full h-12 font-medium" disabled={loading}>
+        <Button type="submit" className="w-full h-12 font-medium" disabled={loading || unknown || !agreed}>
           {loading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -94,6 +70,7 @@ export default function PrivacyConsent() {
           )}
         </Button>
       </form>
+      <button onClick={() => logout(true)} className="mt-4 text-xs text-muted-foreground">Sign out</button>
     </AuthLayout>
   );
 }

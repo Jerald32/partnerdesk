@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Ticket, Settings, Users, Building2,
   Handshake, ChevronRight, Zap, CircleUser,
-  Shield, UserCog, Ghost, Crown, ScrollText, ShieldCheck, History
+  Shield, UserCog, Ghost, Crown, ScrollText, ShieldCheck, History, Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
@@ -20,10 +20,11 @@ const navItems = [
   { label: '티켓', icon: Ticket, path: '/tickets' },
   { label: '비즈니스', icon: Building2, path: '/businesses' },
   { label: '파트너', icon: Handshake, path: '/partners' },
-  { label: '사용자', icon: Users, path: '/users' },
+  { label: '사용자 관리', icon: Users, path: '/users', adminOnly: true },
+  { label: '알림', icon: Bell, path: '/notifications' },
   { label: '권한 변경 이력', icon: ShieldCheck, path: '/role-change-logs', adminOnly: true },
   { label: '접속 기록', icon: History, path: '/access-logs', adminOnly: true },
-  { label: '파기 이력', icon: ScrollText, path: '/data-deletion-logs' },
+  { label: '파기 이력', icon: ScrollText, path: '/data-deletion-logs', adminOnly: true },
   { label: '설정', icon: Settings, path: '/settings' },
 ];
 
@@ -68,7 +69,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => ['/', '/tickets', '/businesses'].includes(item.path) && !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
+        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
           const isActive = location.pathname === item.path || 
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const Icon = item.icon;
@@ -96,7 +97,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
       {/* My account link */}
       <div className="px-3 py-3 border-t border-border">
         <Link
-          to="/"
+          to="/my"
           onClick={onCloseMobileNav}
           className={cn(
             "flex items-center gap-2.5 px-2 py-1.5 rounded-md transition-colors",

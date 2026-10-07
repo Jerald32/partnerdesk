@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
-import { Plus, Handshake, ChevronRight, Ticket, Pencil } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { invokeAppAuth } from '@/lib/appAuth';
+import { readRows, readPartners } from '@/lib/supabaseData';
+import { Plus, ChevronRight, Ticket, Pencil } from 'lucide-react';
 import CreatePartnerModal from '@/components/partners/CreatePartnerModal';
 import EditPartnerModal from '@/components/partners/EditPartnerModal';
 import PartnerMobileCard from '@/components/partners/PartnerMobileCard';
@@ -24,36 +27,60 @@ export default function PartnerList() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingPartner, setEditingPartner] = useState(null);
 
-  const load = async () => {
-    const [p, t, sp, b] = await Promise.all([
-      base44.entities.Partner.list('-created_date'),
-      base44.entities.Ticket.list(),
-      base44.entities.ServicePartner.list(),
-      base44.entities.Business.list(),
-    ]);
-    setPartners(p); setTickets(t); setServicePartners(sp); setBusinesses(b);
-    setLoading(false);
-  };
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin';
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+
+  const load = () => setRefresh(value => value + 1);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true); setError(''); setEditingPartner(null);
+    async function read() {
+      try {
+
+        await invokeAppAuth('validate-session');
+        if (controller.signal.aborted) return;
+        const [p, t, sp] = await Promise.all([
+          readPartners(controller.signal),
+          readRows(() => supabase.from('tickets').select('id,title,status,priority,assigned_partner_organization_id,created_at,resolved_at,updated_at', { count: 'exact' })
+            .order('created_at', { ascending: false }).order('id'),controller.signal),
+          readRows(() => supabase.from('service_partners').select('id,business_id,partner_organization_id,access_level,role_description,sla_response_hours,sla_resolution_hours', { count: 'exact' })
+            .order('id'),controller.signal),
+        ]);
+        const businessIds = [...new Set(sp.map(row => row.business_id))]; const b = [];
+        for (let offset = 0; offset < businessIds.length; offset += 100) {
+          const { data, error } = await supabase.from('businesses').select('id,name').in('id', businessIds.slice(offset, offset + 100)).abortSignal(controller.signal);
+          if (error) throw error; b.push(...data);
+        }
+        if (controller.signal.aborted) return;
+        setPartners(p); setTickets(t); setServicePartners(sp); setBusinesses(b);
+      } catch { if (!controller.signal.aborted) setError('파트너를 불러오지 못했습니다. 세션과 조회 권한을 확인해 주세요.'); }
+      finally { if (!controller.signal.aborted) { setLoading(false);  } }
+    }
+    void read(); return () => controller.abort();
+  }, [user?.id, refresh]);
 
   const getPartnerBusinesses = (partnerId) => {
-    const ids = servicePartners.filter(sp => sp.partner_id === partnerId).map(sp => sp.business_id);
+    const ids = servicePartners.filter(sp => sp.partner_organization_id === partnerId).map(sp => sp.business_id);
     return businesses.filter(b => ids.includes(b.id)).map(b => b.name);
   };
 
-  useEffect(() => { load(); }, []);
 
-  const getActiveTickets = (partnerId) => tickets.filter(t => t.partner_id === partnerId && t.status !== 'done').length;
-  const getDoneTickets = (partnerId) => tickets.filter(t => t.partner_id === partnerId && t.status === 'done').length;
+
+  const getActiveTickets = (partnerId) => tickets.filter(t => t.assigned_partner_organization_id === partnerId && t.status !== 'done').length;
+  const getDoneTickets = (partnerId) => tickets.filter(t => t.assigned_partner_organization_id === partnerId && t.status === 'done').length;
   const getSlaPerf = (partnerId) => {
-    const done = tickets.filter(t => t.partner_id === partnerId && t.status === 'done');
+    const done = tickets.filter(t => t.assigned_partner_organization_id === partnerId && t.status === 'done');
     if (!done.length) return null;
     const onTime = done.filter(t => {
-      const hrs = (new Date(t.resolved_at || t.updated_date) - new Date(t.created_date)) / 3600000;
+      const hrs = (new Date(t.resolved_at || t.updated_at) - new Date(t.created_at)) / 3600000;
       return hrs <= 24;
     }).length;
     return Math.round((onTime / done.length) * 100);
   };
 
+  if (error) return <div role="alert" className="py-16 text-center text-muted-foreground">{error}</div>;
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -61,12 +88,13 @@ export default function PartnerList() {
           <h2 className="text-lg font-semibold text-foreground">파트너 관리</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{partners.length}개 파트너</p>
         </div>
-        <button
+        {canManage && <button
+          disabled={loading}
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
         >
           <Plus className="w-3.5 h-3.5" /> 파트너 추가
-        </button>
+        </button>}
       </div>
 
       {/* Mobile cards */}
@@ -85,7 +113,7 @@ export default function PartnerList() {
               doneCount={getDoneTickets(partner.id)}
               sla={getSlaPerf(partner.id)}
               onClick={() => navigate(`/partners/${partner.id}`)}
-              onEdit={setEditingPartner}
+              onEdit={canManage ? setEditingPartner : undefined}
             />
           ))
         )}
@@ -179,13 +207,13 @@ export default function PartnerList() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <button
+                        {canManage && <button
                           onClick={(e) => { e.stopPropagation(); setEditingPartner(partner); }}
                           className="p-1.5 rounded hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
                           title="편집"
                         >
                           <Pencil className="w-3.5 h-3.5" />
-                        </button>
+                        </button>}
                         <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </td>
@@ -197,14 +225,14 @@ export default function PartnerList() {
         </table>
       </div>
 
-      {showCreate && (
+      {showCreate && canManage && (
         <CreatePartnerModal
           onClose={() => setShowCreate(false)}
           onCreated={() => { setShowCreate(false); load(); }}
         />
       )}
 
-      {editingPartner && (
+      {editingPartner && canManage && (
         <EditPartnerModal
           partner={editingPartner}
           onClose={() => setEditingPartner(null)}

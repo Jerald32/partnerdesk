@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/lib/AuthContext';
+import { invokeAppAuth } from '@/lib/appAuth';
+import { readRows, readPartners, isUuid } from '@/lib/supabaseData';
 import { ArrowLeft, Ticket, Building2, TrendingUp, CheckCircle2, Crown, Wrench, Pencil } from 'lucide-react';
-import { StatusBadge, PriorityBadge } from '@/components/ui/StatusBadge';
+import { StatusBadge } from '@/components/ui/StatusBadge';
 import EditPartnerModal from '@/components/partners/EditPartnerModal';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -24,21 +27,43 @@ export default function PartnerDetail() {
   const [loading, setLoading] = useState(true);
   const [editingPartner, setEditingPartner] = useState(null);
 
-  const load = async () => {
-    const [partners, t, b, sp] = await Promise.all([
-      base44.entities.Partner.list(),
-      base44.entities.Ticket.filter({ partner_id: id }, '-created_date'),
-      base44.entities.Business.list(),
-      base44.entities.ServicePartner.filter({ partner_id: id }),
-    ]);
-    setPartner(partners.find(p => p.id === id) || null);
-    setTickets(t); setBusinesses(b); setServicePartners(sp);
-    setLoading(false);
-  };
+  const { user } = useAuth();
+  const canManage = user?.role === 'admin';
+  const [error, setError] = useState('');
+  const [refresh, setRefresh] = useState(0);
+  const [loadedId, setLoadedId] = useState(null);
+  const load = () => setRefresh(value => value + 1);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true); setError(''); setEditingPartner(null);
+    async function read() {
+      try {
+        if (!isUuid(id)) throw new Error('invalid_id');
+        await invokeAppAuth('validate-session');
+        if (controller.signal.aborted) return;
+        const [p, t, sp] = await Promise.all([
+          readPartners(controller.signal, id),
+          readRows(() => supabase.from('tickets').select('id,title,status,priority,assigned_partner_organization_id,created_at,resolved_at,updated_at', { count: 'exact' })
+            .eq('assigned_partner_organization_id', id).order('created_at', { ascending: false }).order('id'),controller.signal),
+          readRows(() => supabase.from('service_partners').select('id,business_id,partner_organization_id,access_level,role_description,sla_response_hours,sla_resolution_hours', { count: 'exact' })
+            .eq('partner_organization_id', id).order('id'),controller.signal),
+        ]);
+        const businessIds = [...new Set(sp.map(row => row.business_id))]; const b = [];
+        for (let offset = 0; offset < businessIds.length; offset += 100) {
+          const { data, error } = await supabase.from('businesses').select('id,name').in('id', businessIds.slice(offset, offset + 100)).abortSignal(controller.signal);
+          if (error) throw error; b.push(...data);
+        }
+        if (controller.signal.aborted) return;
+        setPartner(p[0] || null); setTickets(t); setServicePartners(sp); setBusinesses(b);
+      } catch { if (!controller.signal.aborted) setError('파트너를 불러오지 못했습니다. 세션과 조회 권한을 확인해 주세요.'); }
+      finally { if (!controller.signal.aborted) { setLoading(false); setLoadedId(id); } }
+    }
+    void read(); return () => controller.abort();
+  }, [id, user?.id, refresh]);
 
-  useEffect(() => { load(); }, [id]);
+  if (error) return <div role="alert" className="py-16 text-center text-muted-foreground">{error}</div>;
 
-  if (loading) return (
+  if (loading || loadedId !== id) return (
     <div className="flex items-center justify-center h-64">
       <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
@@ -50,7 +75,7 @@ export default function PartnerDetail() {
   const doneTickets = tickets.filter(t => t.status === 'done').length;
   const onTimeTickets = tickets.filter(t => {
     if (t.status !== 'done' || !t.resolved_at) return false;
-    const hrs = (new Date(t.resolved_at) - new Date(t.created_date)) / 3600000;
+    const hrs = (new Date(t.resolved_at) - new Date(t.created_at)) / 3600000;
     return hrs <= 24;
   }).length;
   const slaPerf = doneTickets > 0 ? Math.round((onTimeTickets / doneTickets) * 100) : null;
@@ -75,12 +100,12 @@ export default function PartnerDetail() {
           <p className="text-xs text-muted-foreground">{TYPE_LABELS[partner.type]} {partner.contact_email && `· ${partner.contact_email}`}</p>
           {partner.description && <p className="text-xs text-muted-foreground mt-1">{partner.description}</p>}
         </div>
-        <button
+        {canManage && <button
           onClick={() => setEditingPartner(partner)}
           className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-accent border border-border rounded-md hover:bg-accent/70 transition-colors shrink-0"
         >
           <Pencil className="w-3.5 h-3.5" /> 편집
-        </button>
+        </button>}
       </div>
 
       {/* Stats */}
@@ -128,7 +153,7 @@ export default function PartnerDetail() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
-                      {cs.role && <span>{cs.role}</span>}
+                      {cs.role_description && <span>{cs.role_description}</span>}
                       <span>응답 {cs.sla_response_hours}h · 해결 {cs.sla_resolution_hours}h</span>
                     </div>
                   </div>
@@ -158,7 +183,7 @@ export default function PartnerDetail() {
                   <span className="font-mono text-xs text-muted-foreground">#{t.id?.slice(-6)}</span>
                   <span className="flex-1 text-sm text-foreground truncate">{t.title}</span>
                   <StatusBadge status={t.status} />
-                  <span className="text-xs text-muted-foreground">{format(new Date(t.created_date), 'MM/dd')}</span>
+                  <span className="text-xs text-muted-foreground">{format(new Date(t.created_at), 'MM/dd')}</span>
                 </div>
               ))}
             </div>
@@ -166,7 +191,7 @@ export default function PartnerDetail() {
         </div>
       </div>
 
-      {editingPartner && (
+      {editingPartner && canManage && (
         <EditPartnerModal
           partner={editingPartner}
           onClose={() => setEditingPartner(null)}
