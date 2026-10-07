@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { useRef, useState } from 'react';
+import { supabase } from '@/lib/supabaseClient';
 import { X } from 'lucide-react';
 import AddressField from '@/components/tickets/AddressField';
 
-export default function CreateTicketModal({ businesses, partners, onClose, onCreated }) {
+export default function CreateTicketModal({ businesses, partners, servicePartners = [], onClose, onCreated }) {
   const REQUEST_TYPES = [
     '장애/고장', '설치 요청', '점검/유지보수', '교체 요청',
     '소프트웨어 오류', '네트워크 문제', '이전/철거', '기타',
@@ -12,29 +12,75 @@ export default function CreateTicketModal({ businesses, partners, onClose, onCre
   const [form, setForm] = useState({
     title: '', description: '', request_type: '', request_detail: '',
     business_id: '', partner_id: '',
-    priority: 'normal', customer_name: '', customer_company: '', customer_contact: '', status: 'new',
+    priority: 'normal', customer_name: '', customer_company: '', customer_contact: '',
     address: '', address_detail: '',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [outcomeUnknown, setOutcomeUnknown] = useState(false);
+  const submitting = useRef(false);
+  const availablePartners = partners.filter(partner => servicePartners.some(relation =>
+    relation.business_id === form.business_id && relation.partner_organization_id === partner.id));
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v, ...(k === 'business_id' ? { partner_id: '' } : {}) }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setSaving(true);
     setError('');
+    let retryAllowed = true;
+    let createdTicket;
     try {
       // 제목 자동 생성: 요청사항 기반 (없으면 요청 유형 사용)
       const autoTitle = (form.request_detail || '').trim() || form.request_type || '티켓';
       // 서버에서 속도 제한(1분 5개) 검증 후 생성
-      await base44.functions.invoke('createTicket', { ...form, title: autoTitle.slice(0, 100) });
-      onCreated();
+      const { data, error: rpcError } = await supabase.rpc('create_ticket', {
+        p_business_id: form.business_id,
+        p_title: autoTitle.slice(0, 100),
+        p_description: form.description || null,
+        p_request_type: form.request_type || null,
+        p_request_detail: form.request_detail || null,
+        p_priority: form.priority,
+        p_customer_name: form.customer_name || null,
+        p_customer_company: form.customer_company || null,
+        p_customer_contact: form.customer_contact || null,
+        p_address: form.address || null,
+        p_address_detail: form.address_detail || null,
+        p_assigned_partner_organization_id: form.partner_id || null,
+      });
+      if (rpcError) throw rpcError;
+      const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!data || !uuid.test(data.id) || data.status !== 'new' ||
+          !Number.isInteger(data.version) || data.version < 1 ||
+          !(data.assigned_partner_organization_id === null || uuid.test(data.assigned_partner_organization_id))) {
+        throw new Error('invalid_create_response');
+      }
+      retryAllowed = false;
+      createdTicket = data;
     } catch (err) {
-      setError(err?.response?.data?.error || err?.message || '티켓 생성에 실패했습니다.');
+      // Missing/transport responses cannot prove that the transaction did not commit.
+      if (!err?.code || err.message === 'invalid_create_response') {
+        retryAllowed = false;
+        setOutcomeUnknown(true);
+        setError('생성 결과를 확인할 수 없습니다. 중복 생성을 피하려면 이 창을 닫고 목록을 새로고침해 확인해 주세요.');
+      } else {
+        const messages = {
+          ticket_create_rate_limit_exceeded: '1분에 최대 5건까지 생성할 수 있습니다. 잠시 후 다시 시도해 주세요.',
+          business_not_found_or_forbidden: '선택한 비즈니스를 사용할 수 없습니다. 목록을 새로고침해 주세요.',
+          business_partner_relation_required: '선택한 비즈니스와 파트너의 연결을 확인해 주세요.',
+          partner_assignment_forbidden: '다른 파트너 조직에는 배정할 수 없습니다.',
+          address_too_long: '주소와 상세주소는 각각 200자 이하여야 합니다.',
+        };
+        setError(messages[err.message] || '티켓 생성에 실패했습니다. 로그인 세션과 입력값, 접근 권한을 확인해 주세요.');
+      }
     } finally {
       setSaving(false);
+      if (retryAllowed) submitting.current = false;
     }
+    // List refresh errors must never be reported as a failed creation.
+    if (createdTicket) onCreated(createdTicket);
   };
 
   const inputClass = "w-full h-8 px-3 text-sm bg-accent border border-border rounded-md text-foreground placeholder-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring";
@@ -46,7 +92,7 @@ export default function CreateTicketModal({ businesses, partners, onClose, onCre
       <div className="w-full max-w-lg rounded-xl border border-border bg-card shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h3 className="text-sm font-semibold text-foreground">새 티켓 생성</h3>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors">
+          <button disabled={saving} onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -89,9 +135,9 @@ export default function CreateTicketModal({ businesses, partners, onClose, onCre
             </div>
             <div>
               <label className={labelClass}>파트너 배정</label>
-              <select value={form.partner_id} onChange={e => set('partner_id', e.target.value)} className={selectClass}>
+              <select disabled={!form.business_id || saving} value={form.partner_id} onChange={e => set('partner_id', e.target.value)} className={selectClass}>
                 <option value="">파트너 선택 (선택사항)</option>
-                {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {availablePartners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
@@ -125,10 +171,10 @@ export default function CreateTicketModal({ businesses, partners, onClose, onCre
             </select>
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={onClose} className="h-8 px-4 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors">
+            <button type="button" disabled={saving} onClick={onClose} className="h-8 px-4 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-accent transition-colors">
               취소
             </button>
-            <button type="submit" disabled={saving} className="h-8 px-4 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50">
+            <button type="submit" disabled={saving || outcomeUnknown} className="h-8 px-4 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors disabled:opacity-50">
               {saving ? '생성 중...' : '티켓 생성'}
             </button>
           </div>

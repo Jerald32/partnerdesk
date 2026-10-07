@@ -9,6 +9,7 @@ import SlaBar from '@/components/ui/SlaBar';
 import TicketFilters from '@/components/tickets/TicketFilters';
 import { format } from 'date-fns';
 import TicketMobileCard from '@/components/tickets/TicketMobileCard';
+import CreateTicketModal from '@/components/tickets/CreateTicketModal';
 import { maskName, maskPhone, regionSummary } from '@/lib/mask';
 
 // Match Dashboard's paged reads so the Data API limit does not truncate filters.
@@ -31,6 +32,10 @@ export default function TicketList() {
   const [tickets, setTickets] = useState([]);
   const [businesses, setBusinesses] = useState([]);
   const [partners, setPartners] = useState([]);
+  const [servicePartners, setServicePartners] = useState([]);
+  const [showCreate, setShowCreate] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+  const [createdTicketId, setCreatedTicketId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({ search: '', status: '', priority: '', business_id: '', partner_id: '', unassigned: false, mine: false });
@@ -42,13 +47,14 @@ export default function TicketList() {
     setTickets([]);
     setBusinesses([]);
     setPartners([]);
+    setServicePartners([]);
 
     async function loadTickets() {
       try {
         // Validate without extending the session; invalid sessions may hide all rows.
         await invokeAppAuth('validate-session');
         if (controller.signal.aborted) return;
-        const [ticketRows, businessRows, partnerRows] = await Promise.all([
+        const [ticketRows, businessRows, partnerRows, relationRows] = await Promise.all([
           readAllRows(() => supabase.from('tickets').select(
             'id,title,business_id,customer_company,customer_name,customer_contact,address,request_type,request_detail,status,priority,operator_profile_id,operator_name_snapshot,assigned_partner_organization_id,created_at,resolved_at',
             { count: 'exact' },
@@ -57,15 +63,21 @@ export default function TicketList() {
             .order('name').order('id'), controller.signal),
           readAllRows(() => supabase.from('organizations').select('id,name', { count: 'exact' })
             .eq('type', 'partner').order('name').order('id'), controller.signal),
+          readAllRows(() => supabase.from('service_partners')
+            .select('id,business_id,partner_organization_id', { count: 'exact' })
+            .order('id'), controller.signal),
         ]);
         if (controller.signal.aborted) return;
         // RLS determines visibility; these filters only narrow the returned rows.
         setTickets(ticketRows);
         setBusinesses(businessRows);
         setPartners(partnerRows);
+        setServicePartners(relationRows);
       } catch {
         if (!controller.signal.aborted) {
-          setError('티켓을 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
+          setError(createdTicketId
+            ? '티켓 생성은 완료되었지만 목록을 갱신하지 못했습니다. 다시 생성하지 말고 새로고침해 주세요.'
+            : '티켓을 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -74,7 +86,7 @@ export default function TicketList() {
 
     void loadTickets();
     return () => controller.abort();
-  }, [currentUser?.id]);
+  }, [currentUser?.id, refreshCounter, createdTicketId]);
 
   const filtered = tickets.filter(t => {
     if (filters.search && !t.title?.toLowerCase().includes(filters.search.toLowerCase()) &&
@@ -101,11 +113,11 @@ export default function TicketList() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            disabled
-            title="티켓 생성은 Supabase 전환 준비 중입니다."
+            disabled={loading || Boolean(error)}
+            onClick={() => setShowCreate(true)}
             className="flex items-center gap-1.5 h-8 px-3 text-xs font-medium bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
-            <Plus className="w-3.5 h-3.5" /> 티켓 생성 (준비 중)
+            <Plus className="w-3.5 h-3.5" /> 티켓 생성
           </button>
         </div>
       </div>
@@ -221,6 +233,19 @@ export default function TicketList() {
         </div>
       </div>
 
+      {showCreate && (
+        <CreateTicketModal
+          businesses={businesses}
+          partners={partners}
+          servicePartners={servicePartners}
+          onClose={() => setShowCreate(false)}
+          onCreated={ticket => {
+            setShowCreate(false);
+            setCreatedTicketId(ticket.id);
+            setRefreshCounter(counter => counter + 1);
+          }}
+        />
+      )}
     </div>
   );
 }

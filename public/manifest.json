@@ -1,6 +1,9 @@
 {
   "name": "PartnerDesk",
   "short_name": "PartnerDesk",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
   "description": "파트너·티켓 통합 관리 시스템",
   "start_url": "/",
   "scope": "/",

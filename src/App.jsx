@@ -10,6 +10,7 @@ import TopBar from '@/components/layout/TopBar';
 import Login from '@/pages/Login';
 import Dashboard from '@/pages/Dashboard';
 import TicketList from '@/pages/TicketList';
+import BusinessList from '@/pages/BusinessList';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
 
 function Layout() {
@@ -39,6 +40,8 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/tickets" element={<TicketList />} />
           <Route path="/tickets/:id" element={<Unavailable />} />
+          <Route path="/businesses" element={<BusinessList />} />
+          <Route path="/businesses/:id" element={<Unavailable />} />
           <Route path="*" element={<Unavailable />} />
         </Route>
       </Route>
