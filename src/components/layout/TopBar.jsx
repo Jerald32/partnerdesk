@@ -1,9 +1,7 @@
-import { Search, ChevronDown, Menu } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Search, Menu } from 'lucide-react';
 import { useState } from 'react';
 
 export default function TopBar({ title = '', subtitle = '', onToggleMobileNav = () => {} }) {
-  const navigate = useNavigate();
   const [searchVal, setSearchVal] = useState('');
 
   return (

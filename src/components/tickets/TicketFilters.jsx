@@ -21,7 +21,7 @@ const selectClass = "h-7 px-2.5 text-xs bg-accent border border-border rounded-m
 export default function TicketFilters({ filters, onChange, businesses = [], partners = [], currentUser = null }) {
   const set = (key, val) => onChange({ ...filters, [key]: val });
   const hasActive = Object.values(filters).some(v => v);
-  const canShowMine = currentUser && currentUser.role !== 'partner' && currentUser.role !== 'partner_admin';
+  const canShowMine = currentUser && ['admin','operator'].includes(currentUser.role);
 
   return (
     <div className="flex flex-col gap-2.5">

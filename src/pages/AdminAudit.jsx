@@ -1,3 +1,4 @@
+import { isCompanyAdmin } from '@/lib/roles';
 import { useEffect,useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
@@ -11,7 +12,7 @@ export default function AdminAudit({ kind }) {
   useEffect(()=>{
     const controller=new AbortController();setLoading(true);setError('');setRows([]);
     async function load(){try{
-      if(user?.role!=='admin')return;
+      if(!isCompanyAdmin(user))return;
       await invokeAppAuth('validate-session');if(controller.signal.aborted)return;
       const {data,error}=await supabase.rpc('read_admin_audit',{p_kind:kind,p_offset:offset}).abortSignal(controller.signal);
       if(error)throw error;if(!Array.isArray(data?.rows))throw new Error('invalid_response');
@@ -20,7 +21,7 @@ export default function AdminAudit({ kind }) {
     finally{if(!controller.signal.aborted)setLoading(false);}}
     void load();return()=>controller.abort();
   },[kind,offset,user?.id,user?.role]);
-  if(user?.role!=='admin')return <p>관리자만 접근할 수 있습니다.</p>;
+  if(!isCompanyAdmin(user))return <p>관리자만 접근할 수 있습니다.</p>;
   const columns=rows.length?Object.keys(rows[0]):[];
   return <div className="space-y-4"><h2 className="text-lg font-semibold">{TITLES[kind]}</h2>
     {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}

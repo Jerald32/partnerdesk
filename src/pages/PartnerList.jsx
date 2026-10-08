@@ -1,3 +1,4 @@
+import { isCompanyAdmin } from '@/lib/roles';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
@@ -28,7 +29,7 @@ export default function PartnerList() {
   const [editingPartner, setEditingPartner] = useState(null);
 
   const { user } = useAuth();
-  const canManage = user?.role === 'admin';
+  const canManage = isCompanyAdmin(user);
   const [error, setError] = useState('');
   const [refresh, setRefresh] = useState(0);
 

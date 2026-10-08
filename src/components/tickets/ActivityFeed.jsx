@@ -16,13 +16,13 @@ const TYPE_COLORS = {
   assignment: 'text-purple-400',
 };
 
-export default function ActivityFeed({ activities, userRole, requestDetail, requestType, disabled = false, onSubmit }) {
+export default function ActivityFeed({ activities, userRole, companyMember = false, requestDetail, requestType, disabled = false, onSubmit }) {
   const [isInternal, setIsInternal] = useState(false);
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
   const pending = useRef(false);
-  const canNote = ['admin', 'operator'].includes(userRole);
-  const canWrite = ['admin', 'operator', 'partner_admin'].includes(userRole) && Boolean(onSubmit);
+  const canNote = companyMember;
+  const canWrite = ['admin', 'operator'].includes(userRole) && Boolean(onSubmit);
   async function send() {
     if (pending.current || disabled || !canWrite || !content.trim()) return;
     pending.current = true;
@@ -47,7 +47,7 @@ export default function ActivityFeed({ activities, userRole, requestDetail, requ
             <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">{requestDetail}</p>
           </div>
         )}
-        {['admin', 'operator'].includes(userRole) && (
+        {canNote && (
           <div className="flex items-center gap-2 mb-2">
             <button
               disabled={disabled || sending}

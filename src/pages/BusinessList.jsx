@@ -1,3 +1,4 @@
+import { isCompanyMember } from '@/lib/roles';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
@@ -22,7 +23,7 @@ async function readAllRows(createQuery, signal) {
 export default function BusinessList() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const canCreate = ['admin', 'operator'].includes(user?.role);
+  const canCreate = isCompanyMember(user);
   const [businesses, setBusinesses] = useState([]);
   const [servicePartners, setServicePartners] = useState([]);
   const [loading, setLoading] = useState(true);

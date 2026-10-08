@@ -64,7 +64,7 @@ export default function TicketList() {
           readAllRows(() => supabase.from('organizations').select('id,name', { count: 'exact' })
             .eq('type', 'partner').order('name').order('id'), controller.signal),
           readAllRows(() => supabase.from('service_partners')
-            .select('id,business_id,partner_organization_id', { count: 'exact' })
+            .select('id,business_id,partner_organization_id,access_level', { count: 'exact' })
             .order('id'), controller.signal),
         ]);
         if (controller.signal.aborted) return;

@@ -18,19 +18,20 @@ export function AuthProvider({ children }) {
   const checking = useRef(null);
 
   const loadProfile = useCallback(async (authUser, version) => {
-    const { data: profile, error } = await supabase.from('profiles').select('*')
+    const { data: profile, error } = await supabase.from('profiles').select('*,organization:organizations!profiles_organization_id_fkey(id,name,type,is_active)')
       .eq('auth_user_id', authUser.id).maybeSingle();
     if (error) throw new Error('Profile 조회에 실패했습니다. 앱 세션과 DB 접근 권한을 확인해 주세요.');
     if (!profile || ['suspended', 'disabled'].includes(profile.account_status)) throw new Error('사용 가능한 Profile이 없습니다.');
     let consentValid = true;
-    if (profile.role === 'partner_admin') {
+    if (!profile.organization || (!profile.organization.is_active && profile.role !== 'guest')) throw new Error('소속 조직을 사용할 수 없습니다. 관리자에게 문의해 주세요.');
+    if (profile.organization.type === 'partner' && profile.role !== 'guest') {
       const { data, error: consentError } = await supabase.rpc('get_privacy_consent_status');
       if (consentError) throw new Error('개인정보 동의 상태를 확인할 수 없습니다.');
       consentValid = data?.valid === true;
     }
     if (version !== epoch.current) return;
     setPrivacyConsentValid(consentValid);
-    setUser({ ...profile, is_verified: Boolean(authUser.email_confirmed_at) });
+    setUser({ ...profile, organization_type: profile.organization.type, is_verified: Boolean(authUser.email_confirmed_at) });
     setAuthError(null);
   }, []);
 

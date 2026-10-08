@@ -2,8 +2,14 @@ import { useRef, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { X } from 'lucide-react';
 import AddressField from '@/components/tickets/AddressField';
+import { useAuth } from '@/lib/AuthContext';
+import { isCompanyMember } from '@/lib/roles';
 
 export default function CreateTicketModal({ businesses, partners, servicePartners = [], onClose, onCreated }) {
+  const { user } = useAuth();
+  const availableBusinesses = isCompanyMember(user) ? businesses : businesses.filter(business =>
+    servicePartners.some(relation => relation.business_id === business.id
+      && relation.partner_organization_id === user?.organization_id && relation.access_level === 'business'));
   const REQUEST_TYPES = [
     '장애/고장', '설치 요청', '점검/유지보수', '교체 요청',
     '소프트웨어 오류', '네트워크 문제', '이전/철거', '기타',
@@ -71,6 +77,7 @@ export default function CreateTicketModal({ businesses, partners, servicePartner
           business_not_found_or_forbidden: '선택한 비즈니스를 사용할 수 없습니다. 목록을 새로고침해 주세요.',
           business_partner_relation_required: '선택한 비즈니스와 파트너의 연결을 확인해 주세요.',
           partner_assignment_forbidden: '다른 파트너 조직에는 배정할 수 없습니다.',
+          business_partner_access_required: '이 Business에서는 배정된 Ticket만 처리할 수 있습니다. 새 Ticket은 Company 또는 Business Partner에 요청해 주세요.',
           address_too_long: '주소와 상세주소는 각각 200자 이하여야 합니다.',
         };
         setError(messages[err.message] || '티켓 생성에 실패했습니다. 로그인 세션과 입력값, 접근 권한을 확인해 주세요.');
@@ -104,8 +111,9 @@ export default function CreateTicketModal({ businesses, partners, servicePartner
             <label className={labelClass}>비즈니스 *</label>
             <select required value={form.business_id} onChange={e => set('business_id', e.target.value)} className={selectClass}>
               <option value="">비즈니스 선택</option>
-              {businesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {availableBusinesses.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
+            {!availableBusinesses.length && <p className="text-xs text-muted-foreground">새 Ticket을 생성할 수 있는 Business가 없습니다. 배정된 Ticket은 목록에서 처리해 주세요.</p>}
           </div>
           <div>
             <label className={labelClass}>상호</label>

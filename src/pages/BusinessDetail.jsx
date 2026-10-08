@@ -1,3 +1,4 @@
+import { isCompanyMember, isCompanyAdmin } from '@/lib/roles';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
@@ -27,7 +28,8 @@ export default function BusinessDetail() {
   const [newPartnerForm, setNewPartnerForm] = useState({ partner_id: '', access_level: 'service', role: '', sla_response_hours: 4, sla_resolution_hours: 24 });
 
   const { user } = useAuth();
-  const canManage = ['admin', 'operator'].includes(user?.role);
+  const canManage = isCompanyAdmin(user);
+  const canEditBusiness = isCompanyMember(user);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -169,7 +171,7 @@ export default function BusinessDetail() {
           <h2 className="text-lg font-semibold text-foreground">{business.name}</h2>
           {business.description && <p className="text-xs text-muted-foreground mt-0.5">{business.description}</p>}
         </div>
-        {canManage && <button disabled={saving} onClick={() => setEditing({ business })} className="text-xs text-primary">Business 수정</button>}
+        {canEditBusiness && <button disabled={saving} onClick={() => setEditing({ business })} className="text-xs text-primary">Business 수정</button>}
       </div>
 
       {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
@@ -290,7 +292,7 @@ export default function BusinessDetail() {
           </div>
         )}
       </div>
-      {editing && canManage && <EditBusinessFieldsModal {...editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(v => v + 1); }} />}
+      {editing && (editing.business ? canEditBusiness : canManage) && <EditBusinessFieldsModal {...editing} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(v => v + 1); }} />}
       <div className="rounded-lg border border-border bg-card">
         <h3 className="px-5 py-3.5 border-b border-border text-sm font-semibold">Ticket ({ticketCount}) · 최근 20건</h3>
         {tickets.length === 0 && <p className="p-5 text-sm text-muted-foreground">조회 가능한 Ticket이 없습니다.</p>}

@@ -20,7 +20,7 @@ const SECTIONS = [
     items: [
       { name: '다중인증(MFA)', detail: '이메일 6자리 인증코드 2단계 인증(5분 만료)', component: 'mfaSendCode, mfaVerifyCode, MfaToken' },
       { name: 'IP 접근 제한', detail: '사전 등록된 IP만 접근 허용, 미등록 IP 차단', component: 'checkIpAccess, IpWhitelist' },
-      { name: '역할 기반 권한(RBAC)', detail: 'Admin / Operator / Partner Admin / Guest 등급별 기능 제한', component: 'User.role, ProtectedRoute' },
+      { name: '조직 및 역할 기반 권한', detail: '조직과 Business 관계로 Ticket 범위를 제한하고, 조직 내부 Admin / Operator와 승인 대기 Guest를 구분', component: 'Supabase RLS 및 RPC' },
       { name: '세션 만료', detail: '1시간 미조작 시 자동 로그아웃, 탭 간 동기화', component: 'useIdleTimeout' },
       { name: '계정 상태 관리', detail: '장기 미접속 경고·계정 차단(정지) 처리', component: 'account_status(suspended/inactive_warning)' },
     ],

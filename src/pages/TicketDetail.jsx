@@ -1,3 +1,4 @@
+import { isCompanyMember, isCompanyAdmin, ALLOWED_ROLES } from '@/lib/roles';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
@@ -17,10 +18,14 @@ export default function TicketDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
-  const isOperator = ['admin', 'operator'].includes(currentUser?.role);
+  const isOperator = isCompanyMember(currentUser);
+  const canWork = ALLOWED_ROLES.includes(currentUser?.role);
   const [error, setError] = useState(null);
   const [loadedId, setLoadedId] = useState(null);
   const [ticket, setTicket] = useState(null);
+  const [operatorOrganization, setOperatorOrganization] = useState(null);
+  const canTakeOver = isCompanyAdmin(currentUser) || (currentUser?.role === 'admin'
+    && operatorOrganization === currentUser.organization_id);
   const [activities, setActivities] = useState([]);
   const [businesses, setBusinesses] = useState([]);
   const [partners, setPartners] = useState([]);
@@ -39,6 +44,7 @@ export default function TicketDetail() {
     setLoading(true);
     setError(null);
     setTicket(null);
+    setOperatorOrganization(null);
     setActivities([]);
     setBusinesses([]);
     setPartners([]);
@@ -91,15 +97,20 @@ export default function TicketDetail() {
           }
           return { data: organizations, relationIds: new Set(relations.map(r => r.partner_organization_id)) };
         }
-        const [businessResult, partnerResult, activityRows] = await Promise.all([
+        const [businessResult, partnerResult, activityRows, operatorResult] = await Promise.all([
           supabase.from('businesses').select('id,name').eq('id', row.business_id)
             .abortSignal(controller.signal).maybeSingle(),
           readPartners(),
           readActivities(),
+          row.operator_profile_id && currentUser?.role === 'admin'
+            ? supabase.from('profiles').select('organization_id').eq('id', row.operator_profile_id).abortSignal(controller.signal).maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
         ]);
         if (businessResult.error) throw businessResult.error;
+        if (operatorResult.error) throw operatorResult.error;
         if (controller.signal.aborted) return;
         setTicket(row);
+        setOperatorOrganization(operatorResult.data?.organization_id || null);
         setBusinesses(businessResult.data ? [businessResult.data] : []);
         setPartners(partnerResult.data.map(p => ({ ...p, selectable: partnerResult.relationIds.has(p.id) })));
         setActivities(activityRows);
@@ -194,7 +205,7 @@ export default function TicketDetail() {
           <ArrowLeft className="w-4 h-4 text-muted-foreground" />
         </button>
         <span className="text-xs font-mono text-muted-foreground">#{id?.slice(-6)}</span>
-        {['admin', 'operator', 'partner_admin'].includes(currentUser?.role) && (
+        {canWork && (
           <StatusTransitionBar currentStatus={ticket.status} disabled={saving || ticket.retention_state === 'anonymized'}
             onTransition={status => mutateTicket('change_ticket_status', { p_ticket_id: ticket.id, p_status: status, p_expected_version: ticket.version })} />
         )}
@@ -230,17 +241,17 @@ export default function TicketDetail() {
             )}
 
             {/* 담당자 배정 토글 - admin/operator only */}
-            {isOperator && (
+            {canWork && (
               <div className="pt-2 border-t border-border">
                 <label className="flex items-center justify-between cursor-pointer">
                   <span className="text-xs font-medium text-muted-foreground">나에게 배정</span>
                   <Switch
                     checked={ticket.operator_profile_id === currentUser.id}
-                    disabled={saving || ticket.retention_state === 'anonymized' || (ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id && currentUser.role !== 'admin')}
+                    disabled={saving || ticket.retention_state === 'anonymized' || (ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id && !canTakeOver)}
                     onCheckedChange={assign => mutateTicket('change_ticket_operator', { p_ticket_id: ticket.id, p_assign_to_me: assign, p_expected_version: ticket.version })}
                   />
                 </label>
-                {currentUser.role === 'admin' && ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id &&
+                {canTakeOver && ticket.operator_profile_id && ticket.operator_profile_id !== currentUser.id &&
                   <button disabled={saving || ticket.retention_state === 'anonymized'} className="mt-2 text-xs text-primary"
                     onClick={() => mutateTicket('change_ticket_operator', { p_ticket_id: ticket.id, p_assign_to_me: false, p_expected_version: ticket.version })}>담당자 해제</button>}
               </div>
@@ -272,7 +283,7 @@ export default function TicketDetail() {
           <TicketAddressCard
             key={ticket.id}
             ticket={ticket}
-            editable={isOperator}
+            editable={canWork}
             disabled={saving || ticket.retention_state === 'anonymized'}
             onSave={value => mutateTicket('update_ticket_address', { p_ticket_id: ticket.id, p_address: value.address || null,
               p_address_detail: value.address_detail || null, p_expected_version: ticket.version })}
@@ -372,6 +383,7 @@ export default function TicketDetail() {
                 key={ticket.id}
                 activities={activities.filter(a => a.type === 'comment' || a.type === 'note')}
                 userRole={currentUser?.role}
+                companyMember={isOperator}
                 disabled={saving || ticket.retention_state === 'anonymized'}
                 onSubmit={(type, content) => mutateTicket('add_ticket_activity', { p_ticket_id: ticket.id, p_type: type, p_content: content })}
               />

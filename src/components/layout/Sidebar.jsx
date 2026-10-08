@@ -2,16 +2,15 @@ import { Link, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard, Ticket, Settings, Users, Building2,
   Handshake, ChevronRight, Zap, CircleUser,
-  Shield, UserCog, Ghost, Crown, ScrollText, ShieldCheck, History, Bell
+  Shield, UserCog, Ghost, ScrollText, ShieldCheck, History, Bell
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { isGuest } from '@/lib/roles';
+import { isGuest, isCompanyAdmin, canManageUsers } from '@/lib/roles';
 
 const ROLE_CONFIG = {
   admin:         { label: 'Admin',         icon: Shield,    color: 'bg-primary/20 text-primary border-primary/30' },
   operator:      { label: 'Operator',      icon: UserCog,   color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-  partner_admin: { label: 'Partner Admin', icon: Crown,     color: 'bg-teal-500/20 text-teal-400 border-teal-500/30' },
   guest:         { label: 'Guest',          icon: Ghost,     color: 'bg-slate-500/20 text-slate-400 border-slate-500/30' },
 };
 
@@ -22,9 +21,9 @@ const navItems = [
   { label: '파트너', icon: Handshake, path: '/partners' },
   { label: '사용자 관리', icon: Users, path: '/users', adminOnly: true },
   { label: '알림', icon: Bell, path: '/notifications' },
-  { label: '권한 변경 이력', icon: ShieldCheck, path: '/role-change-logs', adminOnly: true },
-  { label: '접속 기록', icon: History, path: '/access-logs', adminOnly: true },
-  { label: '파기 이력', icon: ScrollText, path: '/data-deletion-logs', adminOnly: true },
+  { label: '권한 변경 이력', icon: ShieldCheck, path: '/role-change-logs', companyAdminOnly: true },
+  { label: '접속 기록', icon: History, path: '/access-logs', companyAdminOnly: true },
+  { label: '파기 이력', icon: ScrollText, path: '/data-deletion-logs', companyAdminOnly: true },
   { label: '설정', icon: Settings, path: '/settings' },
 ];
 
@@ -69,7 +68,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || userRole === 'admin')).map((item) => {
+        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || canManageUsers(user)) && (!item.companyAdminOnly || isCompanyAdmin(user))).map((item) => {
           const isActive = location.pathname === item.path || 
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const Icon = item.icon;
