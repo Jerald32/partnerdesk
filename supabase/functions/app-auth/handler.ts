@@ -89,7 +89,7 @@ export function createHandler(getServices: () => Services): (req: Request) => Pr
         if (!user.emailConfirmed || !user.email) throw new HttpError(403, "email_not_verified");
         const profile = await services.profile(user.id);
         if (!profile) throw new HttpError(403, "profile_not_found");
-        if (["suspended", "disabled"].includes(profile.account_status)) throw new HttpError(403, "account_unavailable");
+        if (["suspended", "disabled"].includes(profile.account_status)) throw new HttpError(403, "account_" + profile.account_status);
         if (profile.email.trim().toLowerCase() !== user.email.trim().toLowerCase()) {
           throw new HttpError(403, "email_identity_mismatch");
         }

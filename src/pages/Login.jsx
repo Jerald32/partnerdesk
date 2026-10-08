@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { LogIn, Mail, Lock, Loader2 } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
+import { supabase } from '@/lib/supabaseClient';
+import { authRedirect } from '@/lib/authRedirect';
 
 
 export default function Login() {
@@ -16,6 +18,16 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState('');
+  const resendConfirmation = async () => {
+    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('이메일을 입력해 주세요.'); return; }
+    setLoading(true); setNotice('');
+    try {
+      await supabase.auth.resend({type:'signup',email:email.trim(),options:{emailRedirectTo:authRedirect('/auth/confirm')}});
+      setNotice('확인이 필요한 가입 계정이면 확인 메일이 발송됩니다.');
+    } catch { setError('요청을 전송하지 못했습니다. 잠시 후 다시 시도해 주세요.'); }
+    finally {setLoading(false);}
+  };
 
   const urlParams = new URLSearchParams(window.location.search);
   const sessionReason = urlParams.get('reason');
@@ -142,6 +154,8 @@ export default function Login() {
           )}
         </Button>
       </form>
+      {notice && <p role="status" className="mt-4 text-sm">{notice}</p>}
+      <button type="button" disabled={loading} onClick={resendConfirmation} className="mt-4 text-xs text-primary">이메일 확인 메일 다시 받기</button>
     </AuthLayout>
   );
 }

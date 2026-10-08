@@ -4,7 +4,9 @@ import { getAppSession } from './appSession';
 const MESSAGES = {
   mfa_required: '이메일 추가 인증이 필요합니다. 현재 단계에서는 MFA 화면이 연결되지 않아 로그인할 수 없습니다.',
   origin_not_allowed: 'app-auth의 허용 Origin에 현재 앱 주소가 등록되지 않았습니다.',
-  profile_not_found: 'Supabase 계정에 연결된 Profile이 없습니다.',
+  profile_not_found: '계정 등록 또는 승인 준비가 완료되지 않았습니다. 관리자에게 문의해 주세요.',
+  account_disabled: '비활성화된 계정입니다. 관리자에게 문의해 주세요.',
+  account_suspended: '이용이 정지된 계정입니다. 관리자에게 정지 해제를 요청해 주세요.',
   account_unavailable: '사용할 수 없는 계정입니다.',
   email_not_verified: 'Supabase 계정의 이메일 인증이 필요합니다.',
   email_identity_mismatch: 'Auth 이메일과 Profile 이메일이 일치하지 않습니다.',

@@ -11,8 +11,10 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [privacyConsentValid, setPrivacyConsentValid] = useState(false);
+  const [recoveryReady, setRecoveryReady] = useState(false);
   const epoch = useRef(0);
   const signingIn = useRef(false);
+  const signingOut = useRef(false);
   const checking = useRef(null);
 
   const loadProfile = useCallback(async (authUser, version) => {
@@ -33,7 +35,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const checkUserAuth = useCallback(() => {
-    if (signingIn.current) return Promise.resolve();
+    if (signingIn.current || signingOut.current) return Promise.resolve();
     if (checking.current) return checking.current;
     const version = epoch.current;
     checking.current = (async () => {
@@ -58,6 +60,8 @@ export function AuthProvider({ children }) {
   }, [loadProfile]);
 
   const login = useCallback(async (email, password) => {
+    if (signingOut.current || signingIn.current) throw new Error('인증 처리 중입니다. 잠시 후 다시 시도해 주세요.');
+    sessionStorage.removeItem('partnerdesk_recovery_user'); setRecoveryReady(false);
     signingIn.current = true;
     const version = ++epoch.current;
     setIsLoadingAuth(true); setUser(null); setAuthError(null);
@@ -66,7 +70,7 @@ export function AuthProvider({ children }) {
       if (getAppSession()) await secureLogout();
       clearAppSession();
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) throw new Error('이메일 또는 비밀번호를 확인해 주세요.');
+      if (error) throw new Error(error.code === 'email_not_confirmed' ? '이메일 확인이 필요합니다. 확인 메일을 열거나 아래에서 다시 요청해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.');
       // Server checks mfa_enabled=false; mfa_required is never treated as success.
       const appSession = await invokeAppAuth('activate-without-mfa');
       if (version !== epoch.current) throw new Error('로그인이 취소되었습니다. 다시 시도해 주세요.');
@@ -80,15 +84,27 @@ export function AuthProvider({ children }) {
   }, [loadProfile]);
 
   const logout = useCallback(async (shouldRedirect = true) => {
-    ++epoch.current; setUser(null); setAuthError(null); setPrivacyConsentValid(false);
-    await secureLogout(shouldRedirect ? '/login' : undefined);
+    signingOut.current = true;
+    ++epoch.current; setUser(null); setAuthError(null); setPrivacyConsentValid(false); setRecoveryReady(false); setIsLoadingAuth(true);
+    try { await secureLogout(shouldRedirect ? '/login' : undefined); }
+    finally { signingOut.current = false; setIsLoadingAuth(false); }
   }, []);
 
   useEffect(() => {
     void checkUserAuth();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        sessionStorage.setItem('partnerdesk_recovery_user', session.user.id);
+        ++epoch.current; clearAppSession(); setUser(null); setRecoveryReady(true); setIsLoadingAuth(false);
+        if (window.location.pathname !== '/reset-password') window.location.replace('/reset-password' + window.location.hash);
+        return;
+      }
+      if (event === 'INITIAL_SESSION' && window.location.pathname === '/reset-password'
+        && session?.user.id === sessionStorage.getItem('partnerdesk_recovery_user')) {
+        setRecoveryReady(true);
+      }
       if (signingIn.current) return;
-      if (event === 'SIGNED_OUT') { ++epoch.current; clearAppSession(); setUser(null); setIsLoadingAuth(false); }
+      if (event === 'SIGNED_OUT') { ++epoch.current; clearAppSession(); setUser(null); setRecoveryReady(false); setIsLoadingAuth(false); }
       // Defer SDK calls outside the auth callback.
       if (event === 'SIGNED_IN') setTimeout(() => { void checkUserAuth(); }, 0);
     });
@@ -105,7 +121,7 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoadingAuth, authError,
     privacyConsentValid, mfaVerified: !!user, emailVerified: !!user?.is_verified,
-    sessionEndedReason: null, login, logout, checkUserAuth }}>
+    sessionEndedReason: null, recoveryReady, login, logout, checkUserAuth }}>
     {children}
   </AuthContext.Provider>;
 }

@@ -2,7 +2,6 @@
 import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/lib/AuthContext';
 import { invokeAppAuth } from '@/lib/appAuth';
-import { readRows } from '@/lib/supabaseData';
 import { useRpcAction } from '@/hooks/useRpcAction';
 import ConsentModal from './ConsentModal';
 
@@ -13,9 +12,9 @@ export default function RoleRequestForm(){
   useEffect(()=>{const controller=new AbortController();async function load(){try{
     await invokeAppAuth('validate-session');if(controller.signal.aborted)return;
     const [orgs,result]=await Promise.all([
-      readRows(()=>supabase.from('organizations').select('id,name,type',{count:'exact'}).eq('is_active',true).order('name').order('id'),controller.signal),
+      supabase.rpc('list_role_request_organizations').abortSignal(controller.signal),
       supabase.from('role_requests').select('id').eq('requester_profile_id',user.id).eq('status','pending').abortSignal(controller.signal).maybeSingle(),
-    ]);if(result.error)throw result.error;if(!controller.signal.aborted){setOrganizations(orgs);setSubmitted(Boolean(result.data));}
+    ]);if(orgs.error)throw orgs.error;if(result.error)throw result.error;if(!controller.signal.aborted){setOrganizations(orgs.data || []);setSubmitted(Boolean(result.data));}
   }catch{if(!controller.signal.aborted)setLoadError('권한 요청 정보를 조회하지 못했습니다.');}finally{if(!controller.signal.aborted)setLoading(false);}}
   void load();return()=>controller.abort();},[user.id]);
   const options=organizations.filter(o=>o.type===(role==='operator'?'operator':'partner'));

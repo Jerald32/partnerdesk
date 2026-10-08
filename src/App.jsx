@@ -8,6 +8,8 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import Sidebar from '@/components/layout/Sidebar';
 import TopBar from '@/components/layout/TopBar';
 import Login from '@/pages/Login';
+import Registration from '@/pages/Registration';
+import PasswordRecovery, { EmailConfirmation } from '@/pages/PasswordRecovery';
 import Dashboard from '@/pages/Dashboard';
 import TicketList from '@/pages/TicketList';
 import TicketDetail from '@/pages/TicketDetail';
@@ -32,8 +34,8 @@ function Layout() {
   </div>;
 }
 
-function Unavailable() {
-  return <div className="p-6 space-y-3"><p>이 화면은 Supabase 전환 준비 중입니다.</p>
+function NotFound() {
+  return <div className="p-6 space-y-3"><p>요청한 페이지를 찾을 수 없습니다.</p>
     <Link to="/" className="text-primary">대시보드로 돌아가기</Link></div>;
 }
 
@@ -41,9 +43,10 @@ export default function App() {
   return <AuthProvider><QueryClientProvider client={queryClientInstance}><BrowserRouter>
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Unavailable />} />
-      <Route path="/forgot-password" element={<Unavailable />} />
-      <Route path="/reset-password" element={<Unavailable />} />
+      <Route path="/register" element={<Registration />} />
+      <Route path="/forgot-password" element={<PasswordRecovery />} />
+      <Route path="/reset-password" element={<PasswordRecovery reset />} />
+      <Route path="/auth/confirm" element={<EmailConfirmation />} />
       <Route element={<ProtectedRoute unauthenticatedElement={<Navigate to="/login" replace />} />}>
         <Route element={<Layout />}>
           <Route path="/" element={<Dashboard />} />
@@ -60,9 +63,9 @@ export default function App() {
           <Route path="/access-logs" element={<AdminAudit key="access" kind="access" />} />
           <Route path="/role-change-logs" element={<AdminAudit key="role" kind="role" />} />
           <Route path="/data-deletion-logs" element={<AdminAudit key="deletion" kind="deletion" />} />
-          <Route path="*" element={<Unavailable />} />
         </Route>
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes><Toaster />
   </BrowserRouter></QueryClientProvider></AuthProvider>;
 }

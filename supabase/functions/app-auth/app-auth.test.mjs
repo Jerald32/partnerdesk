@@ -210,7 +210,9 @@ test('bad nonce/code/device/token formats are rejected before RPC', async () => 
 test('suspended/disabled/email mismatch cannot create authentication', async () => {
   for (const account_status of ['suspended', 'disabled']) {
     const f = fixture({ profile: async () => ({ email: 'user@example.invalid', account_status }) });
-    assert.equal((await result(f.handle, { action: 'activate-without-mfa' })).status, 403);
+    const denied = await result(f.handle, { action: 'activate-without-mfa' });
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.reason, 'account_' + account_status);
     assert.equal(f.calls.length, 0);
   }
   const f = fixture({ profile: async () => ({ email: 'other@example.invalid', account_status: 'active' }) });
