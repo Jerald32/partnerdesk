@@ -22,7 +22,8 @@ test('server audit: authorization, immutable history and transactional failure',
    CREATE TABLE auth.users(id uuid PRIMARY KEY,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb DEFAULT '{}',encrypted_password text);
    CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$SELECT NULLIF(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
    GRANT EXECUTE ON FUNCTION auth.uid() TO anon,authenticated,service_role;`);
-  const files=readdirSync(new URL('../supabase/migrations/',import.meta.url)).sort();
+  // Stage 3 baseline: stage 4 deliberately blocks all disposal, tested separately.
+  const files=readdirSync(new URL('../supabase/migrations/',import.meta.url)).sort().filter(f=>f<'20261015000000');
   for(const file of files.filter(f=>f<'20261008000003')){
    let s=readFileSync(new URL('../supabase/migrations/'+file,import.meta.url),'utf8');
    if(file==='20261006000015_add_user_role_management.sql')s=s.replace("CASE WHEN v_org.type = 'operator' THEN 'operator_company' ELSE 'partner' END THEN","(CASE WHEN v_org.type = 'operator' THEN 'operator_company' ELSE 'partner' END) THEN");

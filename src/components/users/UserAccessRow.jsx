@@ -35,7 +35,7 @@ export default function UserAccessRow({ profile, organizations, onSaved, actorId
         {profile.id !== actorId && profile.account_status !== 'disabled' && <button type="button" onClick={() => {
           if (window.confirm('계정을 비활성화하시겠습니까?')) void run('deactivate_profile', { p_profile_id: profile.id });
         }} className="text-destructive">비활성화</button>}
-        {profile.account_status === 'suspended' && <button type="button" onClick={() => void run('reactivate_profile', { p_profile_id: profile.id })}>정지 해제</button>}
+        {['suspended','disabled'].includes(profile.account_status) && <button type="button" onClick={() => void run('reactivate_profile', { p_profile_id: profile.id })}>정지 해제</button>}
       </fieldset>
     </div>
     <p id={descriptionId} role="status" className="text-xs text-muted-foreground">{busy ? '권한 변경을 저장하고 있습니다.' : unknown ? '처리 결과가 불확실합니다. 목록을 새로고침하여 결과를 확인해 주세요.' : validation || '변경사항을 저장할 수 있습니다.'}</p>

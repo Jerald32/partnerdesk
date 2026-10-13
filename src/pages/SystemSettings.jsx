@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { invokeAppAuth } from '@/lib/appAuth';
 import { readRows } from '@/lib/supabaseData';
+import LifecycleReview from '@/components/settings/LifecycleReview';
 
 export default function SystemSettings(){
   const {user}=useAuth();const [settings,setSettings]=useState([]),[ips,setIps]=useState([]),[error,setError]=useState(''),[loading,setLoading]=useState(true);
@@ -21,6 +22,7 @@ export default function SystemSettings(){
       {error&&<p role="alert" className="text-sm text-destructive">{error}</p>}
       {loading?<p>불러오는 중...</p>:<><div className="rounded-lg border border-border bg-card p-4 space-y-2">{settings.map(row=><p key={row.id} className="text-xs"><span className="text-muted-foreground">{row.key}</span> · {row.value}</p>)}</div>
       <div className="rounded-lg border border-border bg-card p-4"><h3 className="text-sm mb-2">IP 목록</h3>{ips.map(row=><p key={row.id} className="text-xs">{row.ip_address} · {row.description} · {row.is_active?'활성':'비활성'}</p>)}</div></>}
+    <LifecycleReview />
     </>}
   </div>;
 }
