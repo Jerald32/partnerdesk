@@ -1,19 +1,22 @@
 import { codeHash, importHmacKey, randomHex, sessionHash, verificationCode } from "./crypto.ts";
 import type { EmailAdapter } from "./email.ts";
 import { HttpError, requestBody, response } from "./http.ts";
+import { emailOtpAction, type EmailOtpAdapter } from './email-otp.ts';
 
 export type RpcName = "backend_create_mfa_challenge" | "backend_verify_mfa_and_create_app_session" |
-  "backend_activate_app_session_without_mfa" | "backend_validate_and_touch_app_session" | "backend_revoke_app_session";
+  "backend_activate_app_session_without_mfa" | "backend_validate_and_touch_app_session" | "backend_revoke_app_session" |
+  "backend_begin_email_mfa" | "backend_email_mfa_delivery" | "backend_reserve_email_mfa_attempt" | "backend_finish_email_mfa";
 
 export interface Services {
   origins: Set<string>;
-  authenticate(jwt: string): Promise<{ id: string; email?: string; emailConfirmed: boolean }>;
+  authenticate(jwt: string): Promise<{ id: string; email?: string; emailConfirmed: boolean; passwordSessionId?: string }>;
   // Only fixed server queries and fixed RPCs; no request-supplied table/filter/RPC.
   profile(userId: string): Promise<{ email: string; account_status: string } | null>;
   ipPolicy(): Promise<{ enabled: boolean; hasActiveEntries: boolean }>;
   rpc(name: RpcName, args: Record<string, unknown>): Promise<Record<string, unknown>>;
   hmacSecret?: string;
   email: EmailAdapter;
+  emailOtp?: EmailOtpAdapter;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -102,6 +105,12 @@ export function createHandler(getServices: () => Services): (req: Request) => Pr
         }
       }
 
+      if (services.emailOtp && (action === 'send-code' || action === 'verify-code')) {
+        return await emailOtpAction(services, user, body, origin);
+      }
+      if (services.emailOtp && action === 'activate-without-mfa' && !user.passwordSessionId) {
+        throw new HttpError(403, 'password_login_required');
+      }
       if (action === "send-code") {
         if (body.force !== undefined && typeof body.force !== "boolean") throw new HttpError(400, "invalid_force");
         // Preflight provider configuration BEFORE creating/throttling a challenge.

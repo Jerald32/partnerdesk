@@ -1,5 +1,12 @@
 # PartnerDesk app-auth backend contract
 
+Production now uses Supabase Auth email OTP through `email-otp.ts`; see
+[`docs/email-mfa-rollout.md`](../../../docs/email-mfa-rollout.md) for the current
+delivery readiness, six-digit policy, password-session binding and rollout.
+The HMAC/provider adapter contract below is retained as a historical fallback
+implementation and offline test contract, not the production OTP delivery path.
+`PARTNERDESK_EMAIL_OTP_READY` defaults to false; deploying code never enables MFA.
+
 One endpoint: `POST /functions/v1/app-auth`, JSON body with an `action`.
 Every POST requires a valid Supabase user access JWT in `Authorization: Bearer ...`.
 When invoking through the gateway, also supply the project's public API key in

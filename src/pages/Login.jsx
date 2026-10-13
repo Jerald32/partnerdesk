@@ -9,10 +9,11 @@ import AuthLayout from "@/components/AuthLayout";
 import GoogleIcon from "@/components/GoogleIcon";
 import { supabase } from '@/lib/supabaseClient';
 import { authRedirect } from '@/lib/authRedirect';
+import EmailMfa from '@/components/auth/EmailMfa';
 
 
 export default function Login() {
-  const { login, authError } = useAuth();
+  const { login, authError, mfaChallenge } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,8 +39,9 @@ export default function Login() {
     setLoading(true);
     try {
       // 이전 MFA·IP 세션 정리
-      await login(email, password);
-      navigate("/", { replace: true });
+      const result = await login(email, password);
+      setPassword('');
+      if (!result?.mfaRequired) navigate("/", { replace: true });
     } catch (err) {
       setError(err.message || "Invalid email or password");
     } finally {
@@ -50,6 +52,10 @@ export default function Login() {
   const handleGoogle = () => {
     setError("Google 로그인은 아직 연결되지 않았습니다. 이메일과 비밀번호로 로그인해 주세요.");
   };
+
+  if (mfaChallenge?.pending) return <AuthLayout icon={Lock} title="이메일 2차 인증" subtitle="인증을 완료하면 업무 세션이 발급됩니다.">
+    <EmailMfa onComplete={() => navigate('/', { replace: true })} />
+  </AuthLayout>;
 
   return (
     <AuthLayout

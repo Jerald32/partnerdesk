@@ -38,6 +38,39 @@ const nonce = '00'.repeat(32);
 const token = '01'.repeat(32);
 const fixtureKey = 'ab'.repeat(32); // Known test vector, not a provisioned secret.
 
+function otpFixture({ready=true,verified=true}={}) {
+  return fixture({
+    authenticate: async()=>({id:userId,email:'user@example.invalid',emailConfirmed:true,passwordSessionId:sessionId}),
+    emailOtp:{ready,async send(){},async verify(){return verified?userId:null;}},
+    rpc:async(name)=>{
+      if(name==='backend_begin_email_mfa')return {ok:true,challenge_id:challengeId,nonce,expires_at:'2030-01-01T00:05:00Z'};
+      if(name==='backend_reserve_email_mfa_attempt')return {ok:true,attempt_id:sessionId};
+      if(name==='backend_finish_email_mfa')return verified?{ok:true,session_id:sessionId,expires_at:'2030-01-01T08:00:00Z',last_activity_at:'2030-01-01T00:00:00Z'}:{ok:false,reason:'code_invalid'};
+      return {ok:true};
+    },
+  });
+}
+
+test('Supabase email OTP requires configured delivery and a password-authenticated session',async()=>{
+  assert.equal((await result(otpFixture({ready:false}).handle,{action:'send-code'})).body.reason,'email_otp_not_configured');
+  const f=otpFixture();f.services.authenticate=async()=>({id:userId,email:'user@example.invalid',emailConfirmed:true});
+  assert.equal((await result(f.handle,{action:'send-code'})).body.reason,'password_login_required');
+});
+test('Supabase OTP send exposes only challenge metadata; verification never returns the Auth session',async()=>{
+  const f=otpFixture();const send=await result(f.handle,{action:'send-code'});assert.equal(send.status,200);
+  assert.equal(send.body.app_session_token,undefined);
+  const verified=await result(f.handle,{action:'verify-code',challenge_id:challengeId,nonce,code:'123456'});
+  assert.equal(verified.status,200);assert.match(verified.body.app_session_token,/^[0-9a-f]{64}$/);
+  assert.equal(verified.body.access_token,undefined);assert.equal(verified.body.refresh_token,undefined);
+});
+test('OTP failure and account throttling never issue app credentials or reach further verification',async()=>{
+  const f=otpFixture({verified:false});const r=await result(f.handle,{action:'verify-code',challenge_id:challengeId,nonce,code:'123456'});
+  assert.equal(r.status,400);assert.equal(r.body.app_session_token,undefined);
+  const limited=otpFixture();limited.services.rpc=async()=>({ok:false,reason:'mfa_rate_limited'});
+  let sent=false;limited.services.emailOtp.send=async()=>{sent=true;};
+  assert.equal((await result(limited.handle,{action:'send-code',force:true})).status,429);assert.equal(sent,false);
+});
+
 function fixture(overrides = {}) {
   const calls = [];
   const sent = [];
@@ -265,6 +298,7 @@ test('oversized JSON and malformed DB success metadata do not leak token', async
 });
 
 test('actual entry validates JWT with public client and keeps service-role client isolated', async () => {
+  const passwordJwt = 'fixture.' + Buffer.from(JSON.stringify({ sub: userId, session_id: sessionId, amr: [{method:'password'}] })).toString('base64url') + '.fixture';
   const created = [];
   const authCalls = [];
   const rpcCalls = [];
@@ -282,7 +316,7 @@ test('actual entry validates JWT with public client and keeps service-role clien
         assert.equal(key, 'public-test-fixture');
         authCalls.push(jwt);
         if (jwt === 'auth-outage') return { data: {}, error: { status: 503 } };
-        if (jwt !== 'valid-fixture-jwt') return { data: {}, error: { status: 401 } };
+        if (jwt !== 'valid-fixture-jwt' && jwt !== passwordJwt) return { data: {}, error: { status: 401 } };
         return { data: { user: { id: userId, email: 'user@example.invalid',
           email_confirmed_at: '2030-01-01T00:00:00Z' } }, error: null };
       } },
@@ -311,7 +345,8 @@ test('actual entry validates JWT with public client and keeps service-role clien
   assert.equal(authCalls.length, 0);
   assert.equal((await result(handle, { action: 'logout' }, { headers: { authorization: 'Bearer expired' } })).status, 401);
   assert.equal((await result(handle, { action: 'logout' }, { headers: { authorization: 'Bearer auth-outage' } })).status, 503);
-  const success = await result(handle, { action: 'activate-without-mfa' });
+  assert.equal((await result(handle, { action: 'activate-without-mfa' })).status, 403);
+  const success = await result(handle, { action: 'activate-without-mfa' }, { headers: { authorization: 'Bearer ' + passwordJwt } });
   assert.equal(success.status, 200); assert.equal(rpcCalls[0].args.p_auth_user_id, userId);
   assert.equal(rpcCalls[0].name, 'backend_activate_app_session_without_mfa');
   for (const client of created) {

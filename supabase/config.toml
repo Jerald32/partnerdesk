@@ -2,3 +2,14 @@
 # This also supports asymmetric user JWTs without the legacy gateway JWT check.
 [functions.app-auth]
 verify_jwt = false
+
+# Only these declared Auth settings are pushed; SMTP and existing redirects stay unchanged.
+[auth.email]
+enable_confirmations = true
+otp_length = 6
+otp_expiry = 300
+max_frequency = "1m"
+
+[auth.email.template.magic_link]
+subject = "[PartnerDesk] 로그인 인증번호"
+content_path = "./supabase/templates/email-mfa-pin.html"

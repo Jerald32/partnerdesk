@@ -13,6 +13,9 @@ export function AuthProvider({ children }) {
   const [privacyConsentValid, setPrivacyConsentValid] = useState(false);
   const [consentRequirements, setConsentRequirements] = useState([]);
   const [recoveryReady, setRecoveryReady] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null);
+  const pendingMfa = useRef(null);
+  const mfaBusy = useRef(false);
   const epoch = useRef(0);
   const signingIn = useRef(false);
   const signingOut = useRef(false);
@@ -34,7 +37,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const checkUserAuth = useCallback(() => {
-    if (signingIn.current || signingOut.current) return Promise.resolve();
+    if (signingIn.current || signingOut.current || pendingMfa.current) return Promise.resolve();
     if (checking.current) return checking.current;
     const version = epoch.current;
     checking.current = (async () => {
@@ -63,15 +66,28 @@ export function AuthProvider({ children }) {
     sessionStorage.removeItem('partnerdesk_recovery_user'); setRecoveryReady(false);
     signingIn.current = true;
     const version = ++epoch.current;
-    setIsLoadingAuth(true); setUser(null); setAuthError(null);
+    pendingMfa.current = null; setMfaChallenge(null);
+    setIsLoadingAuth(true); setUser(null); setAuthError(null); setPrivacyConsentValid(false); setConsentRequirements([]);
     try {
       // Revoke this tab's previous app session before replacing its Auth identity.
       if (getAppSession()) await secureLogout();
       clearAppSession();
       const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw new Error(error.code === 'email_not_confirmed' ? '이메일 확인이 필요합니다. 확인 메일을 열거나 아래에서 다시 요청해 주세요.' : '이메일 또는 비밀번호를 확인해 주세요.');
-      // Server checks mfa_enabled=false; mfa_required is never treated as success.
-      const appSession = await invokeAppAuth('activate-without-mfa');
+      // A primary Auth JWT grants no business access. Issue the second app
+      // credential only after the server permits the disabled policy or MFA.
+      let appSession;
+      try { appSession = await invokeAppAuth('activate-without-mfa'); }
+      catch (failure) {
+        if (failure.reason !== 'mfa_required') throw failure;
+        pendingMfa.current = { authUser: data.user, version };
+        setMfaChallenge({ pending: true });
+        try {
+          const challenge = await invokeAppAuth('send-code');
+          if (version === epoch.current) setMfaChallenge({ pending: true, ...challenge });
+        } catch (sendFailure) { if (version === epoch.current) setAuthError({ message: sendFailure.message }); }
+        return { mfaRequired: true };
+      }
       if (version !== epoch.current) throw new Error('로그인이 취소되었습니다. 다시 시도해 주세요.');
       saveAppSession(data.user.id, appSession);
       await invokeAppAuth('validate-session');
@@ -82,8 +98,38 @@ export function AuthProvider({ children }) {
     } finally { signingIn.current = false; setIsLoadingAuth(false); }
   }, [loadProfile]);
 
+  const resendMfa = useCallback(async () => {
+    if (!pendingMfa.current || mfaBusy.current) throw new Error('이메일과 비밀번호로 다시 로그인해 주세요.');
+    mfaBusy.current = true;
+    const version = epoch.current;
+    try {
+      const challenge = await invokeAppAuth('send-code', { force: true });
+      if (version !== epoch.current) throw new Error('인증이 취소되었습니다.');
+      setMfaChallenge({ pending: true, ...challenge }); setAuthError(null);
+      return challenge;
+    } finally { mfaBusy.current = false; }
+  }, []);
+
+  const verifyMfa = useCallback(async code => {
+    const pending = pendingMfa.current;
+    if (!pending || !mfaChallenge?.challenge_id || mfaBusy.current) throw new Error('인증번호를 먼저 요청해 주세요.');
+    mfaBusy.current = true;
+    try {
+      const appSession = await invokeAppAuth('verify-code', { code,
+        challenge_id: mfaChallenge.challenge_id, nonce: mfaChallenge.nonce });
+      if (pending.version !== epoch.current) throw new Error('인증이 취소되었습니다.');
+      saveAppSession(pending.authUser.id, appSession);
+      await invokeAppAuth('validate-session');
+      await loadProfile(pending.authUser, pending.version);
+      pendingMfa.current = null; setMfaChallenge(null);
+    } catch (failure) {
+      clearAppSession(); setUser(null); throw failure;
+    } finally { mfaBusy.current = false; }
+  }, [mfaChallenge, loadProfile]);
+
   const logout = useCallback(async (shouldRedirect = true) => {
     signingOut.current = true;
+    pendingMfa.current = null; setMfaChallenge(null);
     ++epoch.current; setUser(null); setAuthError(null); setPrivacyConsentValid(false); setConsentRequirements([]); setRecoveryReady(false); setIsLoadingAuth(true);
     try { await secureLogout(shouldRedirect ? '/login' : undefined); }
     finally { signingOut.current = false; setIsLoadingAuth(false); }
@@ -93,6 +139,7 @@ export function AuthProvider({ children }) {
     void checkUserAuth();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
+        pendingMfa.current = null; setMfaChallenge(null);
         sessionStorage.setItem('partnerdesk_recovery_user', session.user.id);
         ++epoch.current; clearAppSession(); setUser(null); setRecoveryReady(true); setIsLoadingAuth(false);
         if (window.location.pathname !== '/reset-password') window.location.replace('/reset-password' + window.location.hash);
@@ -103,7 +150,7 @@ export function AuthProvider({ children }) {
         setRecoveryReady(true);
       }
       if (signingIn.current) return;
-      if (event === 'SIGNED_OUT') { ++epoch.current; clearAppSession(); setUser(null); setRecoveryReady(false); setIsLoadingAuth(false); }
+      if (event === 'SIGNED_OUT') { ++epoch.current; pendingMfa.current = null; setMfaChallenge(null); clearAppSession(); setUser(null); setRecoveryReady(false); setIsLoadingAuth(false); }
       // Defer SDK calls outside the auth callback.
       if (event === 'SIGNED_IN') setTimeout(() => { void checkUserAuth(); }, 0);
     });
@@ -120,7 +167,7 @@ export function AuthProvider({ children }) {
 
   return <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoadingAuth, authError,
     privacyConsentValid, consentRequirements, mfaVerified: !!user, emailVerified: !!user?.is_verified,
-    sessionEndedReason: null, recoveryReady, login, logout, checkUserAuth }}>
+    sessionEndedReason: null, recoveryReady, login, logout, checkUserAuth, mfaChallenge, verifyMfa, resendMfa }}>
     {children}
   </AuthContext.Provider>;
 }
