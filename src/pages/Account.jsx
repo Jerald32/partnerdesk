@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useRpcAction } from '@/hooks/useRpcAction';
 import RoleRequestForm from '@/components/users/RoleRequestForm';
+import ConsentManagement from '@/components/users/ConsentManagement';
 
 export default function Account() {
   const { user,checkUserAuth } = useAuth();
@@ -15,6 +16,7 @@ export default function Account() {
       <fieldset disabled={busy||unknown} className="space-y-3">{[['full_name','이름'],['display_name','표시 이름'],['job_title','직책']].map(([key,label])=><label key={key} className="block text-xs text-muted-foreground">{label}<input maxLength={200} value={form[key]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} className="mt-1 w-full h-8 px-3 border border-border rounded bg-accent text-foreground" /></label>)}
       <button className="px-3 py-2 rounded bg-primary text-primary-foreground text-xs">저장</button></fieldset>
     </form>
+    <ConsentManagement />
     <RoleRequestForm />
   </div>;
 }

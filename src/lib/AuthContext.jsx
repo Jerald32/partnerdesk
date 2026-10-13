@@ -11,6 +11,7 @@ export function AuthProvider({ children }) {
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [authError, setAuthError] = useState(null);
   const [privacyConsentValid, setPrivacyConsentValid] = useState(false);
+  const [consentRequirements, setConsentRequirements] = useState([]);
   const [recoveryReady, setRecoveryReady] = useState(false);
   const epoch = useRef(0);
   const signingIn = useRef(false);
@@ -22,15 +23,12 @@ export function AuthProvider({ children }) {
       .eq('auth_user_id', authUser.id).maybeSingle();
     if (error) throw new Error('Profile 조회에 실패했습니다. 앱 세션과 DB 접근 권한을 확인해 주세요.');
     if (!profile || ['suspended', 'disabled'].includes(profile.account_status)) throw new Error('사용 가능한 Profile이 없습니다.');
-    let consentValid = true;
     if (!profile.organization || (!profile.organization.is_active && profile.role !== 'guest')) throw new Error('소속 조직을 사용할 수 없습니다. 관리자에게 문의해 주세요.');
-    if (profile.organization.type === 'partner' && profile.role !== 'guest') {
-      const { data, error: consentError } = await supabase.rpc('get_privacy_consent_status');
-      if (consentError) throw new Error('개인정보 동의 상태를 확인할 수 없습니다.');
-      consentValid = data?.valid === true;
-    }
+    const { data: consentStatus, error: consentError } = await supabase.rpc('get_my_consent_requirements');
+    if (consentError || !Array.isArray(consentStatus?.requirements)) throw new Error('개인정보 동의 상태를 확인할 수 없습니다.');
     if (version !== epoch.current) return;
-    setPrivacyConsentValid(consentValid);
+    setPrivacyConsentValid(consentStatus.valid === true);
+    setConsentRequirements(consentStatus.requirements);
     setUser({ ...profile, organization_type: profile.organization.type, is_verified: Boolean(authUser.email_confirmed_at) });
     setAuthError(null);
   }, []);
@@ -86,7 +84,7 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async (shouldRedirect = true) => {
     signingOut.current = true;
-    ++epoch.current; setUser(null); setAuthError(null); setPrivacyConsentValid(false); setRecoveryReady(false); setIsLoadingAuth(true);
+    ++epoch.current; setUser(null); setAuthError(null); setPrivacyConsentValid(false); setConsentRequirements([]); setRecoveryReady(false); setIsLoadingAuth(true);
     try { await secureLogout(shouldRedirect ? '/login' : undefined); }
     finally { signingOut.current = false; setIsLoadingAuth(false); }
   }, []);
@@ -121,7 +119,7 @@ export function AuthProvider({ children }) {
   }, [user, checkUserAuth]);
 
   return <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoadingAuth, authError,
-    privacyConsentValid, mfaVerified: !!user, emailVerified: !!user?.is_verified,
+    privacyConsentValid, consentRequirements, mfaVerified: !!user, emailVerified: !!user?.is_verified,
     sessionEndedReason: null, recoveryReady, login, logout, checkUserAuth }}>
     {children}
   </AuthContext.Provider>;
