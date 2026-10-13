@@ -27,6 +27,7 @@ test('email MFA: real PostgreSQL challenge, attempt, audit and business boundary
   await q("INSERT INTO system_settings(key,value) VALUES('mfa_enabled','false')");
   const before=await q('SELECT * FROM profiles ORDER BY id');
   await db.exec(readFileSync(new URL('../supabase/migrations/20261013000000_email_mfa_flow.sql',import.meta.url),'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261014000000_strengthen_server_audit.sql',import.meta.url),'utf8'));
   const begin=()=>val('SELECT backend_begin_email_mfa($1,$2) AS result',[user,sid]);
   const deliver=c=>val('SELECT backend_email_mfa_delivery($1,$2,$3,true) AS result',[user,sid,c.challenge_id]);
   const reserve=(c,s=sid)=>val('SELECT backend_reserve_email_mfa_attempt($1,$2,$3,$4) AS result',[user,s,c.challenge_id,c.nonce]);

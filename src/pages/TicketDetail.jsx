@@ -57,9 +57,8 @@ export default function TicketDetail() {
         }
         await invokeAppAuth('validate-session');
         if (controller.signal.aborted) return;
-        const { data: row, error: ticketError } = await supabase.from('tickets')
-          .select('id,title,description,request_type,request_detail,business_id,customer_name,customer_company,customer_contact,address,address_detail,status,priority,operator_profile_id,operator_name_snapshot,assigned_partner_organization_id,created_at,resolved_at,version,retention_state')
-          .eq('id', id).abortSignal(controller.signal).maybeSingle();
+        const { data: row, error: ticketError } = await supabase.rpc('read_ticket_detail_audited', { p_ticket_id: id })
+          .abortSignal(controller.signal);
         if (ticketError) throw ticketError;
         if (controller.signal.aborted || !row) return;
         async function readActivities() {
