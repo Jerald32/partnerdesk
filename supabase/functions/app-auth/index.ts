@@ -4,6 +4,7 @@ import { allowedOrigins, HttpError } from "./http.ts";
 import { unconfiguredEmail } from "./email.ts";
 import { consumeGateway } from './gateway.ts';
 import { response } from './http.ts';
+import {timedServices,authenticateOnce} from './timing.ts';
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -75,6 +76,8 @@ function services(): Services {
       return data;
     },
     async ipPolicy() {
+      // consumeGateway already verifies the current DB IP policy for this request.
+      if (Deno.env.get('PARTNERDESK_GATEWAY_REQUIRED') === 'true') return { enabled: false, hasActiveEntries: false };
       const admin = adminClient();
       const { data: setting, error: settingError } = await admin.from("system_settings")
         .select("value").eq("key", "ip_restriction_enabled").maybeSingle();
@@ -97,9 +100,9 @@ function services(): Services {
 }
 
 Deno.serve(async(req)=>{
- const service=services();
+ const timing=timedServices(services()),service=authenticateOnce(timing.service);
  if((Deno.env.get('PARTNERDESK_GATEWAY_REQUIRED')==='true'||req.headers.has('x-partnerdesk-proof'))&&req.method!=='OPTIONS'){
-  try{await consumeGateway(req,service);}catch{return response(403,{success:false,reason:'gateway_required'});}
+  try{await consumeGateway(req,service);}catch{return timing.finish(response(403,{success:false,reason:'gateway_required'}));}
  }
- return createHandler(()=>service)(req);
+ return timing.finish(await createHandler(()=>service)(req));
 });

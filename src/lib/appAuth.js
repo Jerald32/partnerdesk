@@ -25,6 +25,9 @@ const MESSAGES = {
   absolute_expired: '앱 세션의 유효시간이 만료되었습니다. 다시 로그인해 주세요.',
 };
 
+// Only in-flight identical validations are shared. No successful validation,
+// JWT identity, profile or policy is cached across requests/users/sessions.
+const validations=new Map();
 export async function invokeAppAuth(action, fields = {}) {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) throw new Error('Supabase 로그인이 필요합니다.');
@@ -34,6 +37,7 @@ export async function invokeAppAuth(action, fields = {}) {
     if (!appSession || appSession.authUserId !== session.user.id) throw new Error('앱 세션이 없습니다. 다시 로그인해 주세요.');
     headers['X-PartnerDesk-Session'] = appSession.token;
   }
+  const execute=async()=>{
   const result = await supabase.functions.invoke('app-auth', { body: { action, ...fields }, headers });
   let body = result.data;
   if (result.error?.context instanceof Response) {
@@ -46,4 +50,10 @@ export async function invokeAppAuth(action, fields = {}) {
     throw failure;
   }
   return body;
+  };
+  if(action!=='validate-session')return execute();
+  const key=session.access_token+'\0'+headers['X-PartnerDesk-Session']+'\0'+JSON.stringify(fields);
+  if(validations.has(key))return validations.get(key);
+  const pending=execute().finally(()=>validations.delete(key));
+  validations.set(key,pending);return pending;
 }

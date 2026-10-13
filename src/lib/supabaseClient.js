@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearAppSession, getAppSession } from './appSession';
 import { gatewayPath } from './gatewayTransport';
+import {recordGatewayRequest} from './performanceTelemetry';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
@@ -42,7 +43,7 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
         // Public Auth endpoints remain direct; all app data/functions go through
         // the fixed server gateway. Keep AbortSignal and SDK response semantics.
         headers.delete('apikey');
-        return fetch(gatewayPath(url), { ...init, headers });
+        recordGatewayRequest();return fetch(gatewayPath(url), { ...init, headers });
       }
       return fetch(input, { ...init, headers });
     },

@@ -14,6 +14,7 @@ function provider({mfa=true}={}) {
  const imports={react,'./supabaseClient':{supabase:{auth:{signInWithPassword:async()=>({data:{user:authUser},error:null})},
   from:()=>({select:()=>({eq:()=>({maybeSingle:async()=>({data:{role:'guest',account_status:'active',organization:{type:'operator',is_active:true}},error:null})})})}),
   rpc:async()=>({data:{valid:true,requirements:[]},error:null})}},
+ './performanceDiagnostics':{schedulePerformanceComparison(){}},
  './appAuth':{invokeAppAuth:async action=>{calls.push(action);
   if(action==='activate-without-mfa'&&mfa)throw Object.assign(new Error('required'),{reason:'mfa_required'});
   if(action==='send-code')return {challenge_id:'challenge',nonce:'nonce',expires_at:'2030-01-01'};
@@ -36,6 +37,7 @@ test('real AuthProvider keeps password-only login pending and denies failed PIN;
 });
 test('MFA-disabled rollout preserves current password login and cancellation clears pending authentication',async()=>{
  const existing=provider({mfa:false});await existing.render().login('fixture@naver.com','fixture password');assert.equal(existing.saved.length,1);
+ assert.ok(!existing.calls.includes('validate-session'),'fresh server-issued login is not redundantly validated');
  const pending=provider();await pending.render().login('fixture@company.example','fixture password');
  await pending.render().logout(false);assert.equal(pending.render().mfaChallenge,null);assert.equal(pending.render().isAuthenticated,false);assert.equal(pending.saved.length,0);
 });

@@ -112,6 +112,30 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
    assert.equal((await request(11,'gateway_rpc',{name:'request_ip_activation',args:{p_expected_version:latest}})).result._gateway_error.message,'recovery_path_required');
    assert.equal((await q("SELECT has_function_privilege('authenticated','private.verify_ip_operator_recovery(text)','EXECUTE') AS allowed"))[0].allowed,false);
   });
+  await t.test('gateway-only session validation keeps verified email, account and no-touch expiry checks with failure audit',async()=>{
+   const body={name:'validate_app_session',args:{}};
+   const beforeState=(await q('SELECT authenticated_at,last_activity_at,expires_at FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0];
+   const before=beforeState.last_activity_at;
+   const valid=(await request(11,'gateway_rpc',body)).result;
+   assert.equal(valid.success,true);assert.equal(valid.valid,true);
+   assert.equal(Number((await q('SELECT last_activity_at FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0].last_activity_at),Number(before));
+   await q("UPDATE profiles SET email='mismatch@example.invalid' WHERE auth_user_id=$1",[id(11)]);
+   assert.equal((await request(11,'gateway_rpc',body)).result.reason,'email_identity_mismatch');
+   await q('UPDATE profiles SET email=(SELECT email FROM auth.users WHERE id=$1) WHERE auth_user_id=$1',[id(11)]);
+   await q("UPDATE profiles SET account_status='suspended' WHERE auth_user_id=$1",[id(11)]);
+   assert.equal((await request(11,'gateway_rpc',body)).result.reason,'account_suspended');
+   await q("UPDATE profiles SET account_status='active' WHERE auth_user_id=$1",[id(11)]);
+   await q('UPDATE auth.users SET email_confirmed_at=NULL WHERE id=$1',[id(11)]);
+   assert.equal((await request(11,'gateway_rpc',body)).result.reason,'email_not_verified');
+   await q('UPDATE auth.users SET email_confirmed_at=clock_timestamp() WHERE id=$1',[id(11)]);
+   await q("UPDATE private.app_sessions SET authenticated_at=clock_timestamp()-interval '1 hour',last_activity_at=clock_timestamp()-interval '1 hour',expires_at=clock_timestamp()-interval '1 second' WHERE auth_user_id=$1",[id(11)]);
+   const invalid=(await request(11,'gateway_rpc',body,undefined,true)).result;
+   assert.equal(invalid.success,false);assert.equal(invalid.reason,'absolute_expired');
+   assert.ok((await q("SELECT * FROM audit.access_logs WHERE action='session_blocked'")).length>0);
+   await q('UPDATE private.app_sessions SET authenticated_at=$2,last_activity_at=$3,expires_at=$4 WHERE auth_user_id=$1',[id(11),beforeState.authenticated_at,beforeState.last_activity_at,beforeState.expires_at]);
+   assert.equal((await q("SELECT has_function_privilege('anon','public.validate_app_session()','EXECUTE') AS allowed"))[0].allowed,false);
+   assert.equal((await q("SELECT has_function_privilege('service_role','public.validate_app_session()','EXECUTE') AS allowed"))[0].allowed,false);
+  });
   await t.test('only Company Admin disables IP enforcement with audit and unchanged gateway boundary',async()=>{
    await q("UPDATE private.gateway_config SET mode='enforced',pending=jsonb_build_object('old_mode','enforced','expires_at',clock_timestamp()+interval '10 minutes')");
    const version=Number((await q('SELECT version FROM private.gateway_config'))[0].version);

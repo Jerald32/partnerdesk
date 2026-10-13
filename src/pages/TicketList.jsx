@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import TicketMobileCard from '@/components/tickets/TicketMobileCard';
 import CreateTicketModal from '@/components/tickets/CreateTicketModal';
 import { maskName, maskPhone, regionSummary } from '@/lib/mask';
+import {startPageMeasure} from '@/lib/performanceTelemetry';
 
 // Match Dashboard's paged reads so the Data API limit does not truncate filters.
 async function readAllRows(createQuery, signal) {
@@ -42,6 +43,7 @@ export default function TicketList() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const finishMeasure=startPageMeasure('ticket_list');let succeeded=false;
     setLoading(true);
     setError(null);
     setTickets([]);
@@ -51,9 +53,8 @@ export default function TicketList() {
 
     async function loadTickets() {
       try {
-        // Validate without extending the session; invalid sessions may hide all rows.
-        await invokeAppAuth('validate-session');
-        if (controller.signal.aborted) return;
+        // Every read retains gateway/RLS guards. Wait for explicit session
+        // validation too, but do not serialize independent protected requests.
         const [ticketRows, businessRows, partnerRows, relationRows] = await Promise.all([
           readAllRows(() => supabase.from('tickets').select(
             'id,title,business_id,customer_company,customer_name,customer_contact,address,request_type,request_detail,status,priority,operator_profile_id,operator_name_snapshot,assigned_partner_organization_id,created_at,resolved_at',
@@ -66,6 +67,7 @@ export default function TicketList() {
           readAllRows(() => supabase.from('service_partners')
             .select('id,business_id,partner_organization_id,access_level', { count: 'exact' })
             .order('id'), controller.signal),
+          invokeAppAuth('validate-session'),
         ]);
         if (controller.signal.aborted) return;
         // RLS determines visibility; these filters only narrow the returned rows.
@@ -73,6 +75,7 @@ export default function TicketList() {
         setBusinesses(businessRows);
         setPartners(partnerRows);
         setServicePartners(relationRows);
+        succeeded=true;
       } catch {
         if (!controller.signal.aborted) {
           setError(createdTicketId
@@ -80,6 +83,7 @@ export default function TicketList() {
             : '티켓을 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
         }
       } finally {
+        finishMeasure(succeeded&&!controller.signal.aborted);
         if (!controller.signal.aborted) setLoading(false);
       }
     }

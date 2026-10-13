@@ -3,6 +3,7 @@ import { supabase } from './supabaseClient';
 import { invokeAppAuth } from './appAuth';
 import { clearAppSession, getAppSession, saveAppSession } from './appSession';
 import { secureLogout } from './logout';
+import {schedulePerformanceComparison} from './performanceDiagnostics';
 
 const AuthContext = createContext(null);
 
@@ -22,17 +23,20 @@ export function AuthProvider({ children }) {
   const checking = useRef(null);
 
   const loadProfile = useCallback(async (authUser, version) => {
-    const { data: profile, error } = await supabase.from('profiles').select('*,organization:organizations!profiles_organization_id_fkey(id,name,type,is_active)')
-      .eq('auth_user_id', authUser.id).maybeSingle();
+    const [{ data: profile, error }, { data: consentStatus, error: consentError }]=await Promise.all([
+      supabase.from('profiles').select('*,organization:organizations!profiles_organization_id_fkey(id,name,type,is_active)')
+        .eq('auth_user_id', authUser.id).maybeSingle(),
+      supabase.rpc('get_my_consent_requirements'),
+    ]);
     if (error) throw new Error('Profile 조회에 실패했습니다. 앱 세션과 DB 접근 권한을 확인해 주세요.');
     if (!profile || ['suspended', 'disabled'].includes(profile.account_status)) throw new Error('사용 가능한 Profile이 없습니다.');
     if (!profile.organization || (!profile.organization.is_active && profile.role !== 'guest')) throw new Error('소속 조직을 사용할 수 없습니다. 관리자에게 문의해 주세요.');
-    const { data: consentStatus, error: consentError } = await supabase.rpc('get_my_consent_requirements');
     if (consentError || !Array.isArray(consentStatus?.requirements)) throw new Error('개인정보 동의 상태를 확인할 수 없습니다.');
     if (version !== epoch.current) return;
     setPrivacyConsentValid(consentStatus.valid === true);
     setConsentRequirements(consentStatus.requirements);
     setUser({ ...profile, organization_type: profile.organization.type, is_verified: Boolean(authUser.email_confirmed_at) });
+    if(consentStatus.valid===true)schedulePerformanceComparison(supabase,profile);
     setAuthError(null);
   }, []);
 
@@ -96,7 +100,8 @@ export function AuthProvider({ children }) {
       }
       if (version !== epoch.current) throw new Error('로그인이 취소되었습니다. 다시 시도해 주세요.');
       saveAppSession(data.user.id, appSession);
-      await invokeAppAuth('validate-session');
+      // The server just authenticated and issued this session; profile/consent
+      // requests independently enforce it. Restores/polling still validate.
       await loadProfile(data.user, version);
     } catch (error) {
       await secureLogout();
@@ -125,7 +130,7 @@ export function AuthProvider({ children }) {
         challenge_id: mfaChallenge.challenge_id, nonce: mfaChallenge.nonce });
       if (pending.version !== epoch.current) throw new Error('인증이 취소되었습니다.');
       saveAppSession(pending.authUser.id, appSession);
-      await invokeAppAuth('validate-session');
+      // Fresh MFA issuance already completed server authentication and checks.
       await loadProfile(pending.authUser, pending.version);
       pendingMfa.current = null; setMfaChallenge(null);
     } catch (failure) {

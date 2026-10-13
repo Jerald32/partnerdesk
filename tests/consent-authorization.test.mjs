@@ -27,8 +27,10 @@ test('consent migration: real local PostgreSQL RLS, RPC and Auth trigger', async
   const value=async(sql,args=[]) => (await q(sql,args))[0].result;
   const deny=async(n,sql,args=[],pattern=/forbidden|consent|role_not_allowed|company_role_required/) =>
     as(n,()=>assert.rejects(db.query(sql,args),pattern));
-  const legacy=async(n,org=actors.find(p=>p.n===n).org) => q(`INSERT INTO privacy_consents(profile_id,organization_id,consent_type,pledge_version,consent_date,valid_until)
-    VALUES($1,$2,'privacy_pledge','v1.0',clock_timestamp()-interval '1 day',(CURRENT_DATE+interval '1 year'-interval '1 day')::date) RETURNING id`,[id(n),org]);
+  // Match the policy's explicit UTC timezone, including near local midnight.
+  const legacy=async(n,org=actors.find(p=>p.n===n).org) => q(`WITH fixture AS (SELECT clock_timestamp()-interval '1 day' AS signed_at)
+    INSERT INTO privacy_consents(profile_id,organization_id,consent_type,pledge_version,consent_date,valid_until)
+    SELECT $1,$2,'privacy_pledge','v1.0',signed_at,((signed_at AT TIME ZONE 'UTC')+interval '1 year')::date FROM fixture RETURNING id`,[id(n),org]);
   try {
     await db.exec(`CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
       CREATE SCHEMA auth; GRANT USAGE ON SCHEMA auth TO anon,authenticated,service_role;

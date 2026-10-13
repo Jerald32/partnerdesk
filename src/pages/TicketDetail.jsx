@@ -13,6 +13,7 @@ import StatusTransitionBar from '@/components/tickets/StatusTransitionBar';
 import ActivityFeed from '@/components/tickets/ActivityFeed';
 import TicketAddressCard from '@/components/tickets/TicketAddressCard';
 import { format } from 'date-fns';
+import {startPageMeasure} from '@/lib/performanceTelemetry';
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -39,6 +40,7 @@ export default function TicketDetail() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const finishMeasure=startPageMeasure('ticket_detail');let succeeded=false;
     const version = ++generation.current;
     setSaving(false);
     setLoading(true);
@@ -55,12 +57,10 @@ export default function TicketDetail() {
           setError('올바른 티켓 주소가 아닙니다.');
           return;
         }
-        await invokeAppAuth('validate-session');
-        if (controller.signal.aborted) return;
-        const { data: row, error: ticketError } = await supabase.rpc('read_ticket_detail_audited', { p_ticket_id: id })
-          .abortSignal(controller.signal);
+        async function readDetail() {
+        const { data: row, error: ticketError }=await supabase.rpc('read_ticket_detail_audited', { p_ticket_id: id }).abortSignal(controller.signal);
         if (ticketError) throw ticketError;
-        if (controller.signal.aborted || !row) return;
+        if (controller.signal.aborted || !row) return null;
         async function readActivities() {
           const rows = [];
           while (!controller.signal.aborted) {
@@ -101,18 +101,25 @@ export default function TicketDetail() {
             .abortSignal(controller.signal).maybeSingle(),
           readPartners(),
           readActivities(),
-          row.operator_profile_id && currentUser?.role === 'admin'
+          row.operator_profile_id && currentUser?.role === 'admin' && !isCompanyAdmin(currentUser)
             ? supabase.from('profiles').select('organization_id').eq('id', row.operator_profile_id).abortSignal(controller.signal).maybeSingle()
             : Promise.resolve({ data: null, error: null }),
         ]);
         if (businessResult.error) throw businessResult.error;
         if (operatorResult.error) throw operatorResult.error;
-        if (controller.signal.aborted) return;
+        return {row,businessResult,partnerResult,activityRows,operatorResult};
+        }
+        // Dependent reads can begin as soon as the audited row arrives. Explicit
+        // validation still must succeed before any data reaches the UI.
+        const [detail]=await Promise.all([readDetail(),invokeAppAuth('validate-session')]);
+        if (controller.signal.aborted || !detail) return;
+        const {row,businessResult,partnerResult,activityRows,operatorResult}=detail;
         setTicket(row);
         setOperatorOrganization(operatorResult.data?.organization_id || null);
         setBusinesses(businessResult.data ? [businessResult.data] : []);
         setPartners(partnerResult.data.map(p => ({ ...p, selectable: partnerResult.relationIds.has(p.id) })));
         setActivities(activityRows);
+        succeeded=true;
       } catch (failure) {
         if (!controller.signal.aborted) {
           setError(failure.reason || failure.code === '28000'
@@ -120,6 +127,7 @@ export default function TicketDetail() {
             : '티켓을 불러오지 못했습니다. 로그인 세션과 조회 권한을 확인한 뒤 새로고침해 주세요.');
         }
       } finally {
+        finishMeasure(succeeded&&!controller.signal.aborted);
         if (!controller.signal.aborted) {
           setLoadedId(id);
           setLoading(false);
