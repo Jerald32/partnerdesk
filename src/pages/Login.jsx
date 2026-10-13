@@ -32,6 +32,7 @@ export default function Login() {
 
   const urlParams = new URLSearchParams(window.location.search);
   const sessionReason = urlParams.get('reason');
+  const emailMfaTest = urlParams.get('mfa-test') === '1';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,7 +40,7 @@ export default function Login() {
     setLoading(true);
     try {
       // 이전 MFA·IP 세션 정리
-      const result = await login(email, password);
+      const result = await login(email, password, { emailMfa: emailMfaTest });
       setPassword('');
       if (!result?.mfaRequired) navigate("/", { replace: true });
     } catch (err) {
@@ -71,6 +72,7 @@ export default function Login() {
         </>
       }
     >
+      {emailMfaTest && <p role="status" className="mb-4 text-sm text-primary">관리자 이메일 2차 인증 테스트입니다. 비밀번호 확인 후 새 인증번호를 발송합니다.</p>}
       {sessionReason === 'reauth_required' && (
         <div className="mb-4 p-3 rounded-lg bg-primary/10 text-primary text-sm leading-relaxed">
           보안을 위해 주기적 재인증이 필요합니다. 다시 로그인해 주세요.

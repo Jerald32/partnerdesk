@@ -61,7 +61,7 @@ export function AuthProvider({ children }) {
     return checking.current;
   }, [loadProfile]);
 
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, password, { emailMfa = false } = {}) => {
     if (signingOut.current || signingIn.current) throw new Error('인증 처리 중입니다. 잠시 후 다시 시도해 주세요.');
     sessionStorage.removeItem('partnerdesk_recovery_user'); setRecoveryReady(false);
     signingIn.current = true;
@@ -77,9 +77,15 @@ export function AuthProvider({ children }) {
       // A primary Auth JWT grants no business access. Issue the second app
       // credential only after the server permits the disabled policy or MFA.
       let appSession;
-      try { appSession = await invokeAppAuth('activate-without-mfa'); }
-      catch (failure) {
-        if (failure.reason !== 'mfa_required') throw failure;
+      let needsMfa = emailMfa === true;
+      if (!needsMfa) {
+        try { appSession = await invokeAppAuth('activate-without-mfa'); }
+        catch (failure) {
+          if (failure.reason !== 'mfa_required') throw failure;
+          needsMfa = true;
+        }
+      }
+      if (needsMfa) {
         pendingMfa.current = { authUser: data.user, version };
         setMfaChallenge({ pending: true });
         try {

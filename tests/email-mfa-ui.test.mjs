@@ -39,3 +39,11 @@ test('MFA-disabled rollout preserves current password login and cancellation cle
  const pending=provider();await pending.render().login('fixture@company.example','fixture password');
  await pending.render().logout(false);assert.equal(pending.render().mfaChallenge,null);assert.equal(pending.render().isAuthenticated,false);assert.equal(pending.saved.length,0);
 });
+
+test('voluntary MFA test skips disabled-policy session issuance and still requires server PIN success',async()=>{
+ const p=provider({mfa:false});
+ assert.deepEqual(await p.render().login('fixture@company.example','fixture password',{emailMfa:true}),{mfaRequired:true});
+ assert.ok(!p.calls.includes('activate-without-mfa'));assert.equal(p.saved.length,0);assert.equal(p.render().isAuthenticated,false);
+ await assert.rejects(p.render().verifyMfa('000000'),/invalid/);assert.equal(p.saved.length,0);
+ p.accept();await p.render().verifyMfa('123456');assert.equal(p.saved.length,1);assert.equal(p.render().isAuthenticated,true);
+});

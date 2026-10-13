@@ -53,6 +53,10 @@ test('email MFA: real PostgreSQL challenge, attempt, audit and business boundary
    assert.equal((await reserve(c)).reason,'challenge_invalid');await deliver(c);
    assert.equal((await reserve(c,otherSid)).reason,'challenge_invalid');
    assert.equal((await val('SELECT backend_reserve_email_mfa_attempt($1,$2,$3,$4) AS result',[user,sid,c.challenge_id,'00'.repeat(32)])).reason,'challenge_invalid');
+   await q("UPDATE private.email_mfa_challenges SET expires_at=clock_timestamp()-interval '1 second' WHERE id=$1",[c.challenge_id]);
+   assert.equal((await reserve(c)).reason,'challenge_expired');
+   assert.equal((await q('SELECT * FROM private.app_sessions')).length,0);
+   await q('UPDATE private.email_mfa_challenges SET expires_at=$1 WHERE id=$2',[c.expires_at,c.challenge_id]);
   });
   await t.test('five attempts persist and lock; no PIN/raw token enters evidence',async()=>{
    for(let i=0;i<5;i++){const a=await reserve(c);assert.equal(a.ok,true);assert.equal((await finish(c,a,false)).reason,i===4?'mfa_locked':'code_invalid');}

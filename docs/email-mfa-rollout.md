@@ -48,3 +48,12 @@ Auth.getUser로 검증한 JWT의 password AMR 및 session_id를 요구한다. OT
 
 참고: https://supabase.com/docs/guides/auth/auth-email-passwordless
 https://supabase.com/docs/guides/auth/auth-smtp
+
+## SMTP 연결 후 관리자 단독 검증
+
+Custom SMTP 연결 및 6자리·300초·PIN 템플릿 적용을 완료했고, 관리자 한 명의 실제 PIN 수신을 사용자가 확인했다.
+`PARTNERDESK_EMAIL_OTP_READY` Secret이 등록됐으며, 전체 `mfa_enabled=false`는 유지한다.
+`https://partnerdesk-phi.vercel.app/login?mfa-test=1`에서 관리자 본인이 이메일·비밀번호로 로그인하고 새 PIN을 입력한다.
+이 경로는 MFA 미검증 업무 세션 발급을 호출하지 않는다. 앱 권한이나 정책을 우회하는 예외가 아니며, 서버 PIN 검증 성공 후에만 업무 세션을 얻는다.
+일반 로그인 주소와 다른 사용자에게는 이 테스트 선택을 적용하지 않는다. PIN·비밀번호·토큰은 채팅이나 운영 기록에 남기지 않는다.
+운영 인증 성공·세션 발급·관리 화면 접근은 사용자 입력 후 감사 이벤트와 화면 확인으로 판정한다.
