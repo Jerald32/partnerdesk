@@ -112,6 +112,19 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
    assert.equal((await request(11,'gateway_rpc',{name:'request_ip_activation',args:{p_expected_version:latest}})).result._gateway_error.message,'recovery_path_required');
    assert.equal((await q("SELECT has_function_privilege('authenticated','private.verify_ip_operator_recovery(text)','EXECUTE') AS allowed"))[0].allowed,false);
   });
+  await t.test('only Company Admin disables IP enforcement with audit and unchanged gateway boundary',async()=>{
+   await q("UPDATE private.gateway_config SET mode='enforced',pending=jsonb_build_object('old_mode','enforced','expires_at',clock_timestamp()+interval '10 minutes')");
+   const version=Number((await q('SELECT version FROM private.gateway_config'))[0].version);
+   const body={name:'disable_ip_policy',args:{p_expected_version:version}};
+   assert.equal((await request(12,'gateway_rpc',body)).result._gateway_error.code,'42501');
+   assert.equal((await request(11,'gateway_rpc',{...body,args:{p_expected_version:version-1}})).result._gateway_error.code,'40001');
+   await request(11,'gateway_rpc',body,undefined,true);
+   const cfg=(await q('SELECT enabled,mode,pending,version FROM private.gateway_config'))[0];
+   assert.equal(cfg.mode,'monitor');assert.equal(cfg.enabled,true);assert.equal(cfg.pending,null);
+   assert.equal(Number(cfg.version),version+1);
+   assert.equal((await q("SELECT count(*)::integer AS count FROM audit.access_logs WHERE action='ip_policy_disabled'"))[0].count,1);
+   assert.equal((await val('SELECT audit.verify_access_log_chain() AS result')).ok,true);
+  });
   await t.test('documented operator recovery restores business access without removing proof boundary',async()=>{
    await q('UPDATE ip_whitelist SET is_active=false');
    const doc=readFileSync(new URL('../docs/ip-emergency-recovery.md',import.meta.url),'utf8');
