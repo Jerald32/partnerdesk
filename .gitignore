@@ -31,3 +31,6 @@ dist-ssr
 .vite
 !.env.example
 /supabase/.temp/
+
+.vercel
+.env*

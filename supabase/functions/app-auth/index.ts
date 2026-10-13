@@ -2,6 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.95.0";
 import { createHandler, type Services } from "./handler.ts";
 import { allowedOrigins, HttpError } from "./http.ts";
 import { unconfiguredEmail } from "./email.ts";
+import { consumeGateway } from './gateway.ts';
+import { response } from './http.ts';
 
 function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
@@ -77,7 +79,8 @@ function services(): Services {
       const { data: setting, error: settingError } = await admin.from("system_settings")
         .select("value").eq("key", "ip_restriction_enabled").maybeSingle();
       if (settingError) throw new HttpError(503, "backend_unavailable");
-      if (setting?.value !== "true") return { enabled: false, hasActiveEntries: false };
+      // The verified gateway proof is now the authoritative per-request IP gate.
+      if (Deno.env.get('PARTNERDESK_GATEWAY_REQUIRED') === 'true' || setting?.value !== "true") return { enabled: false, hasActiveEntries: false };
       const { data: entries, error: entriesError } = await admin.from("ip_whitelist")
         .select("id").eq("is_active", true).limit(1);
       if (entriesError) throw new HttpError(503, "backend_unavailable");
@@ -93,4 +96,10 @@ function services(): Services {
   };
 }
 
-Deno.serve(createHandler(services));
+Deno.serve(async(req)=>{
+ const service=services();
+ if((Deno.env.get('PARTNERDESK_GATEWAY_REQUIRED')==='true'||req.headers.has('x-partnerdesk-proof'))&&req.method!=='OPTIONS'){
+  try{await consumeGateway(req,service);}catch{return response(403,{success:false,reason:'gateway_required'});}
+ }
+ return createHandler(()=>service)(req);
+});

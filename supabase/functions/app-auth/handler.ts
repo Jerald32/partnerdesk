@@ -5,7 +5,7 @@ import { emailOtpAction, type EmailOtpAdapter } from './email-otp.ts';
 
 export type RpcName = "backend_create_mfa_challenge" | "backend_verify_mfa_and_create_app_session" |
   "backend_activate_app_session_without_mfa" | "backend_validate_and_touch_app_session" | "backend_revoke_app_session" |
-  "backend_begin_email_mfa" | "backend_email_mfa_delivery" | "backend_reserve_email_mfa_attempt" | "backend_finish_email_mfa";
+  "backend_begin_email_mfa" | "backend_email_mfa_delivery" | "backend_reserve_email_mfa_attempt" | "backend_finish_email_mfa" | "backend_gateway_consume";
 
 export interface Services {
   origins: Set<string>;

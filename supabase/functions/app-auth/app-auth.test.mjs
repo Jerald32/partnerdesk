@@ -31,12 +31,25 @@ const { createHandler } = load('handler.ts');
 const { HttpError, allowedOrigins } = load('http.ts');
 const { unconfiguredEmail, verificationEmailText } = load('email.ts');
 const { importHmacKey, codeHash, randomHex, sessionHash, verificationCode } = load('crypto.ts');
+const { consumeGateway } = load('gateway.ts');
 const userId = '11111111-1111-4111-8111-111111111111';
 const challengeId = '22222222-2222-4222-8222-222222222222';
 const sessionId = '33333333-3333-4333-8333-333333333333';
 const nonce = '00'.repeat(32);
 const token = '01'.repeat(32);
 const fixtureKey = 'ab'.repeat(32); // Known test vector, not a provisioned secret.
+
+test('gateway Edge rejects missing proof before RPC and sends only PIN body hash to nonce consumer',async()=>{
+ let called=false;
+ const services={authenticate:async()=>({id:userId}),rpc:async(name,args)=>{
+  called=true;assert.equal(name,'backend_gateway_consume');
+  assert.equal(args.p_body,createHash('sha256').update('{"action":"verify-code","code":"123456"}').digest('hex'));
+  assert.equal(args.p_session,await sessionHash(token));return {sub:userId};
+ }};
+ await assert.rejects(consumeGateway(new Request('https://fixture.invalid',{method:'POST'}),services),/gateway_required/);assert.equal(called,false);
+ const req=new Request('https://fixture.invalid',{method:'POST',headers:{authorization:'Bearer verified-fixture','x-partnerdesk-proof':'fixture-proof','x-partnerdesk-signature':'fixture-signature','x-partnerdesk-session':token},body:'{"action":"verify-code","code":"123456"}'});
+ await consumeGateway(req,services);assert.equal(called,true);
+});
 
 function otpFixture({ready=true,verified=true}={}) {
   return fixture({

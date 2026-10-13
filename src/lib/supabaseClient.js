@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { clearAppSession, getAppSession } from './appSession';
+import { gatewayPath } from './gatewayTransport';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
@@ -36,6 +37,12 @@ export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
         headers.delete('X-PartnerDesk-Session');
         const session = getAppSession();
         if (session) headers.set('X-PartnerDesk-Session', session.token);
+      }
+      if (url.origin === new URL(supabaseUrl).origin && (url.pathname.startsWith('/rest/v1/') || url.pathname === '/functions/v1/app-auth')) {
+        // Public Auth endpoints remain direct; all app data/functions go through
+        // the fixed server gateway. Keep AbortSignal and SDK response semantics.
+        headers.delete('apikey');
+        return fetch(gatewayPath(url), { ...init, headers });
       }
       return fetch(input, { ...init, headers });
     },
