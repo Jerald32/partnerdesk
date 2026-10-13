@@ -86,5 +86,53 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
    const r=await val('SELECT backend_gateway_policy() AS result');assert.equal(r.mode,'monitor');
    assert.equal((await val('SELECT audit.verify_access_log_chain() AS result')).ok,true);
   });
+  await t.test('single IP activation requires independent operator verification and explicit Company Admin approval',async()=>{
+   await q("INSERT INTO ip_whitelist(ip_address,is_active) VALUES('192.0.2.1/32',true)");
+   const version=Number((await q('SELECT version FROM private.gateway_config'))[0].version);
+   const activation={name:'request_ip_activation',args:{p_expected_version:version}};
+   assert.equal((await request(11,'gateway_rpc',activation)).result._gateway_error.message,'recovery_path_required');
+   const verified=await val("SELECT private.verify_ip_operator_recovery('isolated-test') AS result");
+   assert.equal((await request(11,'gateway_rpc',activation)).result._gateway_error.message,'recovery_path_required');
+   const ack={name:'acknowledge_ip_operator_recovery',args:{p_id:verified.id,p_approved:true}};
+   assert.equal((await request(12,'gateway_rpc',ack)).result._gateway_error.code,'42501');
+   const noApproval={...ack,args:{...ack.args,p_approved:false}};
+   assert.equal((await request(11,'gateway_rpc',noApproval)).result._gateway_error.message,'explicit_approval_required');
+   await request(11,'gateway_rpc',ack,undefined,true);
+   assert.equal((await request(12,'gateway_rpc',activation)).result._gateway_error.code,'42501');
+   const wrong=signProof({ip:'198.51.100.1',userId:id(11),sessionToken:raw(11),path:'rpc/gateway_rpc',method:'POST',body:JSON.stringify(activation),policyVersion:version},key);
+   assert.equal((await request(11,'gateway_rpc',activation,wrong)).result._gateway_error.message,'recovery_path_required');
+   await request(11,'gateway_rpc',activation,undefined,true);
+   const pending=(await q('SELECT mode,pending FROM private.gateway_config'))[0];
+   assert.equal(pending.mode,'enforced');assert.equal(pending.pending.old_mode,'monitor');
+   assert.equal((await request(11,'gateway_rpc',{name:'confirm_ip_transition',args:{}})).result._gateway_error.message,'reauthentication_required');
+   await q("UPDATE private.gateway_config SET pending=jsonb_set(pending,'{expires_at}',to_jsonb(clock_timestamp()-interval '1 second'))");
+   assert.equal((await val('SELECT backend_gateway_policy() AS result')).mode,'monitor');
+   await q("UPDATE private.ip_operator_recovery SET verified_at=clock_timestamp()-interval '8 days'");
+   const latest=Number((await q('SELECT version FROM private.gateway_config'))[0].version);
+   assert.equal((await request(11,'gateway_rpc',{name:'request_ip_activation',args:{p_expected_version:latest}})).result._gateway_error.message,'recovery_path_required');
+   assert.equal((await q("SELECT has_function_privilege('authenticated','private.verify_ip_operator_recovery(text)','EXECUTE') AS allowed"))[0].allowed,false);
+  });
+  await t.test('documented operator recovery restores business access without removing proof boundary',async()=>{
+   await q('UPDATE ip_whitelist SET is_active=false');
+   const doc=readFileSync(new URL('../docs/ip-emergency-recovery.md',import.meta.url),'utf8');
+   const sql=doc.match(/<!-- recovery-sql-start -->\s*```sql\n([\s\S]*?)```/)[1];
+   await q("UPDATE private.gateway_config SET mode='enforced',pending=jsonb_build_object('old_mode','enforced','expires_at',clock_timestamp()-interval '1 second')");
+   await assert.rejects(request(11,'gateway_read',read),/ip_not_allowed/);
+   const before=(await q('SELECT version,encode(signing_key,\'hex\') AS key FROM private.gateway_config'))[0];
+   await db.exec(sql);
+   const after=(await q('SELECT enabled,mode,version,pending,encode(signing_key,\'hex\') AS key FROM private.gateway_config'))[0];
+   assert.equal(after.enabled,true);assert.equal(after.mode,'monitor');assert.equal(after.pending,null);
+   assert.equal(Number(after.version),Number(before.version)+1);assert.equal(after.key,before.key);
+   assert.equal((await val('SELECT backend_gateway_policy() AS result')).mode,'monitor');
+   assert.equal((await request(11,'gateway_read',read)).result.rows.length,1);
+   const logs=await q("SELECT * FROM audit.access_logs WHERE action='ip_policy_emergency_recovered'");
+   assert.equal(logs.length,1);assert.equal(logs[0].user_ip,null);
+   assert.equal((await val('SELECT audit.verify_access_log_chain() AS result')).ok,true);
+   await db.exec('BEGIN');try{
+    await q("SELECT set_config('request.jwt.claim.sub',$1,true),set_config('request.method','GET',true),set_config('request.path','/tickets',true)",[id(11)]);
+    await db.exec('SET LOCAL ROLE authenticated');assert.equal((await q('SELECT * FROM tickets')).length,0);
+    await assert.rejects(q('SELECT enforce_gateway_route()'),/gateway_required/);
+   }finally{await db.exec('ROLLBACK');}
+  });
  }finally{await db.close();}
 });

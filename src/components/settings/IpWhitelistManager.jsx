@@ -3,6 +3,7 @@ import {supabase} from '@/lib/supabaseClient';
 import {useRpcAction} from '@/hooks/useRpcAction';
 
 export default function IpWhitelistManager(){
+ const [recoveryApproved,setRecoveryApproved]=useState(false);
  const [policy,setPolicy]=useState(null),[error,setError]=useState(''),[refresh,setRefresh]=useState(0);
  const [editing,setEditing]=useState(null),[ip,setIP]=useState(''),[description,setDescription]=useState(''),[active,setActive]=useState(true);
  const reload=()=>setRefresh(x=>x+1);const {run,busy,error:saveError,unknown}=useRpcAction(reload);
@@ -23,13 +24,19 @@ export default function IpWhitelistManager(){
    </form>
    <div className="space-y-2">{policy.rows.map(row=><div key={row.id} className="flex gap-3 text-xs"><span>{row.ip_address} · {row.description} · {row.is_active?'사용':'비활성'}</span>
     <button onClick={()=>{setEditing(row.id);setIP(row.ip_address);setDescription(row.description||'');setActive(row.is_active);}}>수정·비활성화</button></div>)}</div>
+   <div className="border rounded p-3 space-y-2">
+    <p>단일 사무실 복구: Supabase SQL Editor에서 운영자 권한 검증 SQL을 실행한 후 확인합니다. 화면 접근만으로는 검증되지 않습니다.</p>
+    <p>운영자 검증: {policy.operator_recovery?'확인됨 (7일 유효)':'미확인'} · 관리자 승인: {policy.operator_recovery_ready?'확인됨 (24시간 유효)':'미확인'}</p>
+    <label className="flex gap-2"><input type="checkbox" checked={recoveryApproved} onChange={e=>setRecoveryApproved(e.target.checked)}/>비상 복구 SQL과 실행 순서를 확인했고, 독립된 Supabase 운영자 접근 수단을 확보했습니다.</label>
+    <button disabled={busy||unknown||!policy.operator_recovery||!recoveryApproved} onClick={()=>void run('acknowledge_ip_operator_recovery',{p_id:policy.operator_recovery.id,p_approved:true},data=>Boolean(data?.id))}>복구 절차 명시적 승인</button>
+   </div>
    <div className="flex flex-wrap gap-3 text-xs">
     <button disabled={busy||unknown} onClick={()=>{if(window.confirm('현재 접속 경로를 복구 경로로 확인합니다. 별도 고정 IP/VPN에서도 관리자 로그인 후 이 확인을 실행해 주세요.'))void run('confirm_ip_recovery_path',{});}}>현재 복구 경로 확인</button>
     {policy.mode==='monitor'&&<button disabled={busy||unknown||policy.pending} onClick={()=>{if(window.confirm('모든 조직의 IP 차단을 실제 활성화합니다. 별도 승인을 받은 경우에만 진행하세요. 재로그인 후 10분 안에 확인하지 않으면 복귀합니다.'))void run('request_ip_activation',{p_expected_version:policy.version});}}>별도 승인 후 활성화 요청</button>}
     {policy.pending&&<button disabled={busy||unknown} onClick={()=>void run('confirm_ip_transition',{})}>재로그인 후 정책 확정</button>}
     <button onClick={reload}>새로고침</button>
    </div>
-   <p className="text-xs text-muted-foreground">허용 목록과 별도 복구 IP 접속 확인 없이는 활성화할 수 없습니다. 보호된 Supabase 운영자 복구 절차를 별도로 보관하세요.</p>
+   <p className="text-xs text-muted-foreground">허용 목록과 현재 IP 일치가 필요합니다. 독립된 Supabase 복구 권한 검증 및 관리자 승인, 또는 다른 허용 IP에서 확인한 복구 경로가 있어야 활성화할 수 있습니다.</p>
   </>}
   {(error||saveError)&&<p role="alert" className="text-destructive">{error||saveError}</p>}
  </section>;
