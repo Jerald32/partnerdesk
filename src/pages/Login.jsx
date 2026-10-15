@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,25 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
+  const formRef = useRef(null);
+
+  useEffect(() => {
+    const clearInputs = () => {
+      formRef.current?.reset();
+      setEmail('');
+      setPassword('');
+    };
+    clearInputs();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(event => {
+      if (event === 'SIGNED_OUT') clearInputs();
+    });
+    const onPageShow = event => { if (event.persisted) clearInputs(); };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, [mfaChallenge?.pending]);
   const resendConfirmation = async () => {
     if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('이메일을 입력해 주세요.'); return; }
     setLoading(true); setNotice('');
@@ -41,11 +60,11 @@ export default function Login() {
     try {
       // 이전 MFA·IP 세션 정리
       const result = await login(email, password, { emailMfa: emailMfaTest });
-      setPassword('');
       if (!result?.mfaRequired) navigate("/", { replace: true });
     } catch (err) {
       setError({ message: err.message || "Invalid email or password", title: err.title });
     } finally {
+      setPassword('');
       setLoading(false);
     }
   };
@@ -115,7 +134,7 @@ export default function Login() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
           <div className="relative">
