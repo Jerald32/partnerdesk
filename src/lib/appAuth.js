@@ -45,7 +45,12 @@ export async function invokeAppAuth(action, fields = {}) {
   }
   if (result.error || body?.success !== true) {
     const reason = body?.reason;
-    const failure = new Error(MESSAGES[reason] || 'app-auth 호출에 실패했습니다. Edge Function 배포 및 연결 설정을 확인해 주세요.');
+    const ipDenied = result.error?.context instanceof Response
+      && result.error.context.status === 403 && body?.message === 'ip_not_allowed';
+    const failure = new Error(ipDenied
+      ? '현재 접속 중인 네트워크는 PartnerDesk의 허용된 IP 목록에 등록되어 있지 않습니다. 회사에서 승인된 네트워크로 연결한 후 다시 로그인해 주세요. 문제가 지속되면 시스템 관리자에게 문의해 주세요.'
+      : MESSAGES[reason] || 'app-auth 호출에 실패했습니다. Edge Function 배포 및 연결 설정을 확인해 주세요.');
+    if (ipDenied) failure.title = '접근이 제한된 네트워크입니다.';
     failure.reason = reason;
     throw failure;
   }

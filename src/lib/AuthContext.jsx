@@ -55,7 +55,7 @@ export function AuthProvider({ children }) {
         await loadProfile(authUser, version);
       } catch (error) {
         if (version === epoch.current) {
-          clearAppSession(); setUser(null); setAuthError({ message: error.message });
+          clearAppSession(); setUser(null); setAuthError({ message: error.message, title: error.title });
         }
       } finally {
         if (version === epoch.current) setIsLoadingAuth(false);
@@ -95,7 +95,7 @@ export function AuthProvider({ children }) {
         try {
           const challenge = await invokeAppAuth('send-code');
           if (version === epoch.current) setMfaChallenge({ pending: true, ...challenge });
-        } catch (sendFailure) { if (version === epoch.current) setAuthError({ message: sendFailure.message }); }
+        } catch (sendFailure) { if (version === epoch.current) setAuthError({ message: sendFailure.message, title: sendFailure.title }); }
         return { mfaRequired: true };
       }
       if (version !== epoch.current) throw new Error('로그인이 취소되었습니다. 다시 시도해 주세요.');
@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
       await loadProfile(data.user, version);
     } catch (error) {
       await secureLogout();
-      setUser(null); setAuthError({ message: error.message }); throw error;
+      setUser(null); setAuthError({ message: error.message, title: error.title }); throw error;
     } finally { signingIn.current = false; setIsLoadingAuth(false); }
   }, [loadProfile]);
 

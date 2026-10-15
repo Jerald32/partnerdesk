@@ -44,7 +44,7 @@ export default function Login() {
       setPassword('');
       if (!result?.mfaRequired) navigate("/", { replace: true });
     } catch (err) {
-      setError(err.message || "Invalid email or password");
+      setError({ message: err.message || "Invalid email or password", title: err.title });
     } finally {
       setLoading(false);
     }
@@ -108,7 +108,10 @@ export default function Login() {
 
       {(error || authError?.message) && (
         <div className="mb-4 p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
-          {error || authError?.message}
+          {(error?.title || (!error && authError?.title)) && (
+            <p className="font-semibold mb-1">{error?.title || authError?.title}</p>
+          )}
+          {error?.message || error || authError?.message}
         </div>
       )}
 
