@@ -41,7 +41,7 @@ function registration(policies,{failure=false}={}){
   const Component=module('src/pages/Registration.jsx',{
     react,'react-router-dom':{Link:marker('Link')},'lucide-react':{UserPlus:marker('UserPlus')},
     '@/components/AuthLayout':{default:marker('AuthLayout')},'@/components/ui/input':{Input},'@/components/ui/button':{Button},
-    '@/lib/supabaseClient':{supabase:{rpc:async()=>({data:policies,error:failure?{code:'error'}:null}),auth:{signUp:async args=>{calls.push(args);return {error:null};}}}},
+    '@/lib/supabaseClient':{supabase:{rpc:async()=>({data:policies,error:failure?{code:'error'}:null}),functions:{invoke:async(name,args)=>{calls.push({name,...args});return {error:null};}}}},
     '@/lib/logout':{secureLogout:async()=>{}},'@/lib/authRedirect':{authRedirect:()=>'/auth/confirm'},
     '@/lib/password':{validatePassword:()=>({valid:true}),PASSWORD_RULE_TEXT:'fixture rule'},'@/lib/consent':consent,
   }).default;
@@ -63,11 +63,11 @@ const flush=async()=>{await new Promise(r=>setTimeout(r,0));};
 test('real registration blocks policy-load failure and sends no fabricated agreements when no policy is enabled',async()=>{
   const failed=registration(null,{failure:true});failed.render();await flush();failed.fill();await failed.submit();assert.equal(failed.calls.length,0);
   const normal=registration([]);normal.render();await flush();normal.fill();await normal.submit();
-  assert.equal(normal.calls.length,1);assert.deepEqual(normal.calls[0].options.data.signup_consents,[]);
+  assert.equal(normal.calls.length,1);assert.deepEqual(normal.calls[0].body.signup_consents,[]);
 });
 test('real registration requires configured acknowledgement and submits exact displayed policy/hash',async()=>{
   const p={kind:'signup_privacy',version:'approved-v1',title:'fixture',document_text:'fixture',text_hash:'b'.repeat(64),required:true};
   const f=registration([p]);f.render();await flush();f.fill();await f.submit();assert.equal(f.calls.length,0);
   f.find(f.render(),n=>n.type==='input'&&n.props.type==='checkbox').props.onChange({target:{checked:true}});
-  await f.submit();assert.deepEqual(f.calls[0].options.data.signup_consents,[{kind:p.kind,version:p.version,text_hash:p.text_hash,agreed:true}]);
+  await f.submit();assert.equal(f.calls[0].name,'password-policy');assert.deepEqual(f.calls[0].body.signup_consents,[{kind:p.kind,version:p.version,text_hash:p.text_hash,agreed:true}]);
 });

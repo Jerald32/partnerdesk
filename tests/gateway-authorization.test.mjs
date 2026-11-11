@@ -44,6 +44,11 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
   await q("INSERT INTO businesses(id,name) VALUES($1,'fixture')",[id(20)]);
   await q("INSERT INTO tickets(id,business_id,title) VALUES($1,$2,'fixture')",[id(21),id(20)]);
   const read={table:'tickets',filters:[],order:[{column:'id',direction:'asc'}],limit:100,offset:0};
+  await t.test('role request organization directory retains all rows as an array through the gateway',async()=>{
+   const {result}=await request(13,'gateway_rpc',{name:'list_role_request_organizations',args:{}});
+   assert.ok(Array.isArray(result),'organization directory must remain an array');
+   assert.deepEqual(result.map(row=>row.id).sort(),[id(1),id(2)].sort());
+  });
   await t.test('no proof: direct table/GraphQL-equivalent query empty, old business RPC denied',async()=>{
    await db.exec('BEGIN');try{
     await q("SELECT set_config('request.jwt.claim.sub',$1,true),set_config('request.headers',$2,true),set_config('request.method','POST',true),set_config('request.path','rpc/deactivate_profile',true)",[id(11),JSON.stringify({'x-partnerdesk-session':raw(11)})]);
@@ -81,10 +86,49 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
   });
   await t.test('enforced IP check rejects outside list; expired pending change restores prior policy and list',async()=>{
    await q("UPDATE private.gateway_config SET mode='enforced'");
-   await assert.rejects(request(11,'gateway_read',read),/ip_not_allowed/);
+   assert.equal((await request(11,'gateway_read',read)).result.rows.length,1);
+   await assert.rejects(request(12,'gateway_read',read),/ip_not_allowed/);
    await q("UPDATE private.gateway_config SET pending=jsonb_build_object('old_mode','monitor','old_entries','[]'::jsonb,'expires_at',clock_timestamp()-interval '1 second')");
    const r=await val('SELECT backend_gateway_policy() AS result');assert.equal(r.mode,'monitor');
    assert.equal((await val('SELECT audit.verify_access_log_chain() AS result')).ok,true);
+  });
+  await t.test('Company and Partner Admin IP exemption uses live roles, verified identity and active membership',async()=>{
+   const original=(await q('SELECT mode FROM private.gateway_config'))[0].mode;
+   await q("UPDATE private.gateway_config SET mode='enforced'");
+   try {
+    assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(11)])).exempt,true);
+    for(const n of [12,13]) assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(n)])).exempt,false);
+    assert.equal((await request(11,'gateway_read',read)).result.rows.length,1);
+    await assert.rejects(request(12,'gateway_read',read),/ip_not_allowed/);
+    await q("UPDATE profiles SET role='admin' WHERE auth_user_id=$1",[id(13)]);
+    assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(13)])).exempt,true);
+    assert.ok(Array.isArray((await request(13,'gateway_read',read)).result.rows));
+    for(const status of ['suspended','disabled']) {
+     await q('UPDATE profiles SET account_status=$2 WHERE auth_user_id=$1',[id(13),status]);
+     assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(13)])).exempt,false);
+     await assert.rejects(request(13,'gateway_read',read),/ip_not_allowed/);
+    }
+    await q("UPDATE profiles SET account_status='active' WHERE auth_user_id=$1",[id(13)]);
+    await q('UPDATE organizations SET is_active=false WHERE id=$1',[id(2)]);
+    assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(13)])).exempt,false);
+    await q('UPDATE organizations SET is_active=true WHERE id=$1',[id(2)]);
+    await q('UPDATE auth.users SET email_confirmed_at=NULL WHERE id=$1',[id(13)]);
+    assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(13)])).exempt,false);
+    await q('UPDATE auth.users SET email_confirmed_at=clock_timestamp() WHERE id=$1',[id(13)]);
+    await q("UPDATE profiles SET role='operator' WHERE auth_user_id=$1",[id(13)]);
+    assert.equal((await val('SELECT backend_gateway_ip_exemption($1) AS result',[id(13)])).exempt,false);
+    await assert.rejects(request(13,'gateway_read',read),/ip_not_allowed/);
+    assert.equal((await q("SELECT has_function_privilege('authenticated','public.backend_gateway_ip_exemption(uuid)','EXECUTE') AS allowed"))[0].allowed,false);
+    assert.equal((await q("SELECT has_function_privilege('authenticated','private.is_ip_exempt_admin(uuid)','EXECUTE') AS allowed"))[0].allowed,false);
+    await val("SELECT backend_gateway_audit($1,'198.51.100.1','functions/v1/app-auth','admin_ip_exempt',gen_random_uuid()) AS result",[id(11)]);
+    assert.equal((await q("SELECT count(*)::int AS n FROM audit.access_logs WHERE action='admin_ip_exempt'"))[0].n,1);
+    await assert.rejects(val("SELECT backend_gateway_audit($1,'198.51.100.1','functions/v1/app-auth','admin_ip_exempt',gen_random_uuid()) AS result",[id(12)]),/admin_ip_exemption_not_allowed/);
+   } finally {
+    await q('UPDATE private.gateway_config SET mode=$1',[original]);
+    await q("UPDATE profiles SET role='guest',account_status='active' WHERE auth_user_id=$1",[id(13)]);
+    await q('UPDATE organizations SET is_active=true WHERE id=$1',[id(2)]);
+    await q('UPDATE auth.users SET email_confirmed_at=clock_timestamp() WHERE id=$1',[id(13)]);
+   }
   });
   await t.test('single IP activation requires independent operator verification and explicit Company Admin approval',async()=>{
    await q("INSERT INTO ip_whitelist(ip_address,is_active) VALUES('192.0.2.1/32',true)");
@@ -111,6 +155,26 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
    const latest=Number((await q('SELECT version FROM private.gateway_config'))[0].version);
    assert.equal((await request(11,'gateway_rpc',{name:'request_ip_activation',args:{p_expected_version:latest}})).result._gateway_error.message,'recovery_path_required');
    assert.equal((await q("SELECT has_function_privilege('authenticated','private.verify_ip_operator_recovery(text)','EXECUTE') AS allowed"))[0].allowed,false);
+  });
+  await t.test('30-minute idle timeout is enforced by backend, read RLS and activity guard without polling extension',async()=>{
+   const original=(await q('SELECT authenticated_at,last_activity_at,expires_at FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0];
+   const hash=(await q('SELECT session_token_hash FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0].session_token_hash;
+   try {
+    for(const minutes of [29,30,31]) {
+     await q("UPDATE private.app_sessions SET authenticated_at=clock_timestamp()-interval '1 hour',last_activity_at=clock_timestamp()-make_interval(mins=>$2),expires_at=clock_timestamp()+interval '1 hour' WHERE auth_user_id=$1",[id(11),minutes]);
+     const before=Number((await q('SELECT last_activity_at FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0].last_activity_at);
+     const backend=await val('SELECT backend_validate_and_touch_app_session($1,$2,false) AS result',[id(11),hash]);
+     assert.equal(backend.valid,minutes<30);if(minutes>=30)assert.equal(backend.reason,'idle_expired');
+     assert.equal(Number((await q('SELECT last_activity_at FROM private.app_sessions WHERE auth_user_id=$1',[id(11)]))[0].last_activity_at),before);
+     const readResult=(await request(11,'gateway_read',read)).result;
+     assert.equal(readResult.rows?.length||0,minutes<30?1:0);
+     const touch=(await request(11,'gateway_rpc',{name:'touch_app_session',args:{}})).result;
+     if(minutes<30) assert.ok(new Date(touch.last_activity_at).getTime()>before);
+     else assert.equal(touch._gateway_error.message,'idle_expired');
+    }
+   } finally {
+    await q('UPDATE private.app_sessions SET authenticated_at=$2,last_activity_at=$3,expires_at=$4 WHERE auth_user_id=$1',[id(11),original.authenticated_at,original.last_activity_at,original.expires_at]);
+   }
   });
   await t.test('gateway-only session validation keeps verified email, account and no-touch expiry checks with failure audit',async()=>{
    const body={name:'validate_app_session',args:{}};
@@ -154,7 +218,7 @@ test('gateway: actual PostgreSQL HMAC, nonce use, RLS and policy transition',asy
    const doc=readFileSync(new URL('../docs/ip-emergency-recovery.md',import.meta.url),'utf8');
    const sql=doc.match(/<!-- recovery-sql-start -->\s*```sql\n([\s\S]*?)```/)[1];
    await q("UPDATE private.gateway_config SET mode='enforced',pending=jsonb_build_object('old_mode','enforced','expires_at',clock_timestamp()-interval '1 second')");
-   await assert.rejects(request(11,'gateway_read',read),/ip_not_allowed/);
+   await assert.rejects(request(12,'gateway_read',read),/ip_not_allowed/);
    const before=(await q('SELECT version,encode(signing_key,\'hex\') AS key FROM private.gateway_config'))[0];
    await db.exec(sql);
    const after=(await q('SELECT enabled,mode,version,pending,encode(signing_key,\'hex\') AS key FROM private.gateway_config'))[0];

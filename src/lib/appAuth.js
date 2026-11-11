@@ -21,13 +21,21 @@ const MESSAGES = {
   email_identity_mismatch: 'Auth 이메일과 Profile 이메일이 일치하지 않습니다.',
   ip_enforcement_not_configured: '활성 IP 제한 때문에 app-auth가 접근을 거절했습니다.',
   session_revoked: '앱 세션이 해제되었습니다. 다시 로그인해 주세요.',
-  idle_expired: '15분 유휴 시간이 만료되었습니다. 다시 로그인해 주세요.',
+  idle_expired: '30분 유휴 시간이 만료되었습니다. 다시 로그인해 주세요.',
   absolute_expired: '앱 세션의 유효시간이 만료되었습니다. 다시 로그인해 주세요.',
 };
 
 // Only in-flight identical validations are shared. No successful validation,
 // JWT identity, profile or policy is cached across requests/users/sessions.
 const validations=new Map();
+function failureMessage(body) {
+  const count = body?.fail_count;
+  if (Number.isInteger(count) && count >= 1 && count <= 5 && body?.max_attempts === 5) {
+    if (body.reason === 'code_invalid') return `인증번호가 일치하지 않습니다. (${count}/5 - 5회 실패시 5분간 잠금됩니다)`;
+    if (body.reason === 'mfa_locked') return `인증 시도 5회로 5분간 잠겼습니다. (${count}/5) 잠금 해제 후 인증번호를 다시 요청해 주세요.`;
+  }
+  return MESSAGES[body?.reason] || 'app-auth 호출에 실패했습니다. Edge Function 배포 및 연결 설정을 확인해 주세요.';
+}
 export async function invokeAppAuth(action, fields = {}) {
   const { data: { session }, error } = await supabase.auth.getSession();
   if (error || !session) throw new Error('Supabase 로그인이 필요합니다.');
@@ -49,7 +57,7 @@ export async function invokeAppAuth(action, fields = {}) {
       && result.error.context.status === 403 && body?.message === 'ip_not_allowed';
     const failure = new Error(ipDenied
       ? '현재 접속 중인 네트워크는 PartnerDesk의 허용된 IP 목록에 등록되어 있지 않습니다. 회사에서 승인된 네트워크로 연결한 후 다시 로그인해 주세요. 문제가 지속되면 시스템 관리자에게 문의해 주세요.'
-      : MESSAGES[reason] || 'app-auth 호출에 실패했습니다. Edge Function 배포 및 연결 설정을 확인해 주세요.');
+      : failureMessage(body));
     if (ipDenied) failure.title = '접근이 제한된 네트워크입니다.';
     failure.reason = reason;
     throw failure;

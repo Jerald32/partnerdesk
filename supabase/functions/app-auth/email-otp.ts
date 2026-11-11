@@ -42,7 +42,8 @@ export async function emailOtpAction(services: Services, user: { id: string; ema
   const attempt = await services.rpc('backend_reserve_email_mfa_attempt', context);
   if (attempt.ok !== true) {
     const reason = typeof attempt.reason === 'string' ? attempt.reason : 'challenge_invalid';
-    throw new HttpError(reason === 'mfa_locked' ? 423 : reason === 'challenge_expired' ? 410 : 400, reason);
+    throw new HttpError(reason === 'mfa_locked' ? 423 : reason === 'challenge_expired' ? 410 : 400, reason,
+      typeof attempt.fail_count === 'number' ? attempt.fail_count : undefined);
   }
   let verified = false;
   try { verified = await adapter.verify(user.email, body.code) === user.id; } catch { /* Count failure, including transport uncertainty. */ }
@@ -52,7 +53,8 @@ export async function emailOtpAction(services: Services, user: { id: string; ema
     p_device_label: body.device_label ?? null });
   if (result.ok !== true) {
     const reason = typeof result.reason === 'string' ? result.reason : 'code_invalid';
-    throw new HttpError(reason === 'mfa_locked' ? 423 : 400, reason);
+    throw new HttpError(reason === 'mfa_locked' ? 423 : 400, reason,
+      typeof result.fail_count === 'number' ? result.fail_count : undefined);
   }
   if (!verified || typeof result.session_id !== 'string' || typeof result.expires_at !== 'string' ||
     typeof result.last_activity_at !== 'string') throw new HttpError(503, 'backend_unavailable');

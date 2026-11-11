@@ -1,5 +1,6 @@
 import { organizationScopeDescription } from '@/lib/roles';
 import { useState } from 'react';
+import { accountStatusLabel } from '@/lib/accountStatus';
 import { useRpcAction } from '@/hooks/useRpcAction';
 import { accessOrganizations, accessSaveMessage, formatUserAccessError, USER_ACCESS_ROLES } from '@/lib/userAccessForm';
 
@@ -19,7 +20,7 @@ export default function UserAccessRow({ profile, organizations, onSaved, actorId
   }
   return <form onSubmit={save} className="p-4 border-b border-border last:border-0 space-y-2">
     <div className="flex flex-wrap items-center gap-3">
-      <div className="flex-1 min-w-40"><p className="text-sm font-medium">{profile.display_name || profile.full_name || profile.email}</p><p className="text-xs text-muted-foreground">{profile.email} · {profile.account_status}</p></div>
+      <div className="flex-1 min-w-40"><p className="text-sm font-medium">{profile.display_name || profile.full_name || profile.email}</p><p className="text-xs text-muted-foreground">{profile.email} · {accountStatusLabel(profile.account_status)}</p></div>
       <fieldset disabled={busy || unknown} className="flex flex-wrap items-center gap-2 text-xs">
         <select aria-label="사용자 조직" value={organization} onChange={event => setOrganization(event.target.value)} className="bg-accent border border-border rounded p-2">
           <option value="">조직 선택</option>
@@ -35,7 +36,9 @@ export default function UserAccessRow({ profile, organizations, onSaved, actorId
         {profile.id !== actorId && profile.account_status !== 'disabled' && <button type="button" onClick={() => {
           if (window.confirm('계정을 비활성화하시겠습니까?')) void run('deactivate_profile', { p_profile_id: profile.id });
         }} className="text-destructive">비활성화</button>}
-        {['suspended','disabled'].includes(profile.account_status) && <button type="button" onClick={() => void run('reactivate_profile', { p_profile_id: profile.id })}>정지 해제</button>}
+        {['suspended','disabled'].includes(profile.account_status) && <button type="button" onClick={() => {
+          if (window.confirm('계정을 활성화하시겠습니까? 기존 권한은 유지되며 미접속 자동 차단에 30일 유예가 적용됩니다.')) void run('reactivate_profile', { p_profile_id: profile.id });
+        }}>활성화</button>}
       </fieldset>
     </div>
     <p id={descriptionId} role="status" className="text-xs text-muted-foreground">{busy ? '권한 변경을 저장하고 있습니다.' : unknown ? '처리 결과가 불확실합니다. 목록을 새로고침하여 결과를 확인해 주세요.' : validation || '변경사항을 저장할 수 있습니다.'}</p>

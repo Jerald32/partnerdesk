@@ -28,6 +28,7 @@ test('email MFA: real PostgreSQL challenge, attempt, audit and business boundary
   const before=await q('SELECT * FROM profiles ORDER BY id');
   await db.exec(readFileSync(new URL('../supabase/migrations/20261013000000_email_mfa_flow.sql',import.meta.url),'utf8'));
   await db.exec(readFileSync(new URL('../supabase/migrations/20261014000000_strengthen_server_audit.sql',import.meta.url),'utf8'));
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261109000005_mfa_failure_counts.sql',import.meta.url),'utf8'));
   const begin=()=>val('SELECT backend_begin_email_mfa($1,$2) AS result',[user,sid]);
   const deliver=c=>val('SELECT backend_email_mfa_delivery($1,$2,$3,true) AS result',[user,sid,c.challenge_id]);
   const reserve=(c,s=sid)=>val('SELECT backend_reserve_email_mfa_attempt($1,$2,$3,$4) AS result',[user,s,c.challenge_id,c.nonce]);
@@ -60,7 +61,8 @@ test('email MFA: real PostgreSQL challenge, attempt, audit and business boundary
    await q('UPDATE private.email_mfa_challenges SET expires_at=$1 WHERE id=$2',[c.expires_at,c.challenge_id]);
   });
   await t.test('five attempts persist and lock; no PIN/raw token enters evidence',async()=>{
-   for(let i=0;i<5;i++){const a=await reserve(c);assert.equal(a.ok,true);assert.equal((await finish(c,a,false)).reason,i===4?'mfa_locked':'code_invalid');}
+   for(let i=0;i<5;i++){const a=await reserve(c);assert.equal(a.ok,true);assert.deepEqual(await finish(c,a,false),{ok:false,reason:i===4?'mfa_locked':'code_invalid',fail_count:i+1,max_attempts:5});}
+   assert.deepEqual(await reserve(c),{ok:false,reason:'mfa_locked',fail_count:5,max_attempts:5});
    assert.equal((await reserve(c)).reason,'mfa_locked');assert.equal((await begin()).reason,'mfa_locked');
    assert.equal((await q('SELECT * FROM private.app_sessions')).length,0);
    const events=await q('SELECT action,metadata FROM audit.access_logs');assert.ok(events.some(e=>e.action==='이메일 MFA locked'));

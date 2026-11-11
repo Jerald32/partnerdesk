@@ -64,6 +64,20 @@ function otpFixture({ready=true,verified=true}={}) {
   });
 }
 
+test('MFA errors relay bounded server counts without issuing credentials',async()=>{
+ for(const count of [1,2,3,4,5,0,6,1.5]){
+  const f=otpFixture({verified:false});const rpc=f.services.rpc;
+  f.services.rpc=async(name,...args)=>name==='backend_finish_email_mfa'
+   ?{ok:false,reason:count===5?'mfa_locked':'code_invalid',fail_count:count,max_attempts:5}:rpc(name,...args);
+  const r=await result(f.handle,{action:'verify-code',challenge_id:challengeId,nonce,code:'123456'});
+  assert.equal(r.body.fail_count,Number.isInteger(count)&&count>=1&&count<=5?count:undefined);
+  assert.equal(r.body.app_session_token,undefined);
+ }
+ const f=otpFixture();f.services.rpc=async()=>({ok:false,reason:'mfa_locked',fail_count:5,max_attempts:5});
+ const r=await result(f.handle,{action:'verify-code',challenge_id:challengeId,nonce,code:'123456'});
+ assert.equal(r.body.fail_count,5);assert.equal(r.body.max_attempts,5);
+});
+
 test('Supabase email OTP requires configured delivery and a password-authenticated session',async()=>{
   assert.equal((await result(otpFixture({ready:false}).handle,{action:'send-code'})).body.reason,'email_otp_not_configured');
   const f=otpFixture();f.services.authenticate=async()=>({id:userId,email:'user@example.invalid',emailConfirmed:true});

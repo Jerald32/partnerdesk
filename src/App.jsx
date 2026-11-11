@@ -22,7 +22,9 @@ import Notifications from '@/pages/Notifications';
 import Account from '@/pages/Account';
 import SystemSettings from '@/pages/SystemSettings';
 import AdminAudit from '@/pages/AdminAudit';
+import AccessReviews from '@/pages/AccessReviews';
 import { useIdleTimeout } from '@/hooks/useIdleTimeout';
+import PasswordCycleNotice from '@/components/PasswordCycleNotice';
 
 function Layout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -41,6 +43,7 @@ function NotFound() {
 
 export default function App() {
   return <AuthProvider><QueryClientProvider client={queryClientInstance}><BrowserRouter>
+    <PasswordCycleNotice />
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Registration />} />
@@ -61,6 +64,8 @@ export default function App() {
           <Route path="/my" element={<Account />} />
           <Route path="/settings" element={<SystemSettings />} />
           <Route path="/access-logs" element={<AdminAudit key="access" kind="access" />} />
+          <Route path="/access-reviews" element={<AccessReviews />} />
+          <Route path="/access-reviews/:id" element={<AccessReviews />} />
           <Route path="/role-change-logs" element={<AdminAudit key="role" kind="role" />} />
           <Route path="/data-deletion-logs" element={<AdminAudit key="deletion" kind="deletion" />} />
         </Route>

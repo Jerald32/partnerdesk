@@ -1,0 +1,16 @@
+.git/
+.release/
+.gateway-held/
+.aws/
+.codex/
+.agents/
+.env*
+node_modules/
+dist/
+docs/
+tests/
+scripts/
+supabase/
+legacy/
+base44/
+*.log

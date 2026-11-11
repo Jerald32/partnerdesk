@@ -3,13 +3,13 @@ import { useAuth } from '@/lib/AuthContext';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabaseClient';
 
-const IDLE_LIMIT_MS = 15 * 60 * 1000; // 15분
+const IDLE_LIMIT_MS = 30 * 60 * 1000; // 30분
 const WARNING_MS = 5 * 60 * 1000; // 5분 전 경고
 const STORAGE_KEY = 'idle_last_activity';
 const ACTIVITY_EVENTS = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
 
 /**
- * 인증된 앱 화면에서 15분 동안 활동이 없으면 자동 로그아웃.
+ * 인증된 앱 화면에서 30분 동안 활동이 없으면 자동 로그아웃.
  * - 멀티 탭 동기화: localStorage 타임스탬프 공유로 한 탭의 활동이 다른 탭 타이머도 리셋
  * - 5분 전 안내 토스트 표시
  */
@@ -63,7 +63,7 @@ export function useIdleTimeout() {
         clearInterval(interval);
         toast({
           title: '자동 로그아웃',
-          description: '15분 동안 활동이 없어 로그아웃되었습니다.',
+          description: '30분 동안 활동이 없어 로그아웃되었습니다.',
           variant: 'destructive',
         });
         logout(true);

@@ -1,5 +1,5 @@
 export class HttpError extends Error {
-  constructor(public status: number, public reason: string) { super(reason); }
+  constructor(public status: number, public reason: string, public failCount?: number) { super(reason); }
 }
 
 export function allowedOrigins(config: string | undefined, hosted: boolean): Set<string> {

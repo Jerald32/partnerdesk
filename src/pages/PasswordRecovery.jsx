@@ -20,7 +20,7 @@ export default function PasswordRecovery({ reset = false }) {
     try {
       if (reset) {
         if (!recoveryReady) throw new Error('복구 링크를 다시 요청해 주세요.');
-        const {error} = await supabase.auth.updateUser({password});
+        const {error} = await supabase.functions.invoke('password-policy',{body:{action:'reset',password}});
         if (error) throw new Error('비밀번호를 변경하지 못했습니다. 복구 링크와 비밀번호 규칙을 확인해 주세요.');
         await logout(false);
       } else {

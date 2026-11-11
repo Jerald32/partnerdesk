@@ -193,7 +193,12 @@ export function createHandler(getServices: () => Services): (req: Request) => Pr
       if (result.ok !== true) dbFailure(result);
       return response(200, { success: true }, origin);
     } catch (error) {
-      if (error instanceof HttpError) return response(error.status, { success: false, reason: error.reason }, origin);
+      if (error instanceof HttpError) {
+        const count = error.failCount;
+        const mfaDetails = ['code_invalid', 'mfa_locked'].includes(error.reason) && typeof count === 'number'
+          && Number.isInteger(count) && count >= 1 && count <= 5 ? { fail_count: count, max_attempts: 5 } : {};
+        return response(error.status, { success: false, reason: error.reason, ...mfaDetails }, origin);
+      }
       // Never relay SQL/provider exceptions, credentials, tokens or stack traces.
       return response(503, { success: false, reason: "backend_unavailable" }, origin);
     }

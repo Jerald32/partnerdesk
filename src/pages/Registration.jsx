@@ -6,7 +6,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabaseClient';
 import { secureLogout } from '@/lib/logout';
-import { authRedirect } from '@/lib/authRedirect';
 import { validatePassword, PASSWORD_RULE_TEXT } from '@/lib/password';
 import { signupConsentEntries } from '@/lib/consent';
 
@@ -33,8 +32,8 @@ export default function Registration() {
     setBusy(true);
     try {
       await secureLogout();
-      const { error } = await supabase.auth.signUp({ email: form.email.trim(), password: form.password,
-        options: { data: { full_name: form.name.trim(), signup_consents: entries }, emailRedirectTo: authRedirect('/auth/confirm') } });
+      const { error } = await supabase.functions.invoke('password-policy', { body: { action: 'signup',email: form.email.trim(),password: form.password,
+        name: form.name.trim(),signup_consents: entries } });
       if (error) throw error;
       await secureLogout(); setDone(true);
     } catch { setError('가입을 완료하지 못했습니다. 입력 내용과 잠시 후 재시도를 확인해 주세요. 이미 가입했다면 로그인 또는 비밀번호 찾기를 이용해 주세요.'); }

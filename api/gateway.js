@@ -52,10 +52,20 @@ export default async function handler(req,res){
   }
   else policyResponse=await timing.measure('policy',()=>call('/rest/v1/rpc/backend_gateway_policy',{},true));
   if(!policyResponse.ok)throw new Error('policy_unavailable');
-  const policy=await policyResponse.json(),ip=platformIP(req.headers),verdict=evaluateIP(ip,policy);
+  const policy=await policyResponse.json(),ip=platformIP(req.headers);
+  let verdict=evaluateIP(ip,policy),adminExempt=false;
+  if(verdict.wouldDeny&&userId){
+   // Resolve only the Auth-verified subject against live server-side roles.
+   const exemptionResponse=await timing.measure('ip-exemption',()=>call('/rest/v1/rpc/backend_gateway_ip_exemption',{p_auth_user_id:userId},true));
+   if(!exemptionResponse.ok)throw new Error('ip_exemption_unavailable');
+   const exemption=await exemptionResponse.json();
+   if(typeof exemption.exempt!=='boolean')throw new Error('invalid_ip_exemption');
+   adminExempt=exemption.exempt;
+   if(adminExempt)verdict={...verdict,allowed:true,reason:'admin_ip_exempt'};
+  }
   if(verdict.wouldDeny){
    const audit=await timing.measure('audit',()=>call('/rest/v1/rpc/backend_gateway_audit',{p_user:userId,p_ip:ip,p_path:route,
-    p_verdict:verdict.allowed?'monitor_would_deny':'ip_denied',p_request_id:requestId},true));
+    p_verdict:adminExempt?'admin_ip_exempt':verdict.allowed?'monitor_would_deny':'ip_denied',p_request_id:requestId},true));
    if(!audit.ok)throw new Error('audit_unavailable');
   }
   if(!verdict.allowed)return reply(403,{message:'ip_not_allowed',request_id:requestId});
@@ -93,7 +103,10 @@ export default async function handler(req,res){
   const result=await timing.measure('upstream',()=>viaEdge?fetch(new URL(target,base),{method:'POST',headers:{apikey:publishable,Authorization:authorization,'Content-Type':'application/json','x-region':'ap-northeast-2',...headers},body,signal:AbortSignal.timeout(20000)}):call(target,{p_request:body},false,headers));
   if(viaEdge)timing.edge(result);
   if(!result.ok){const failure=await result.json().catch(()=>({}));
-   return reply(result.status,{message:typeof failure.message==='string'?failure.message:'backend_rejected',code:failure.code,success:false,reason:failure.reason});
+   const count=failure.fail_count;
+   const mfaDetails=['code_invalid','mfa_locked'].includes(failure.reason)&&Number.isInteger(count)&&count>=1&&count<=5&&failure.max_attempts===5
+    ?{fail_count:count,max_attempts:5}:{};
+   return reply(result.status,{message:typeof failure.message==='string'?failure.message:'backend_rejected',code:failure.code,success:false,reason:failure.reason,...mfaDetails});
   }
   const data=await timing.measure('response',()=>result.json());
   if(data?._gateway_error)return reply(data._gateway_error.code==='42501'?403:400,data._gateway_error);

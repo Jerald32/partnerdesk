@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/AuthContext';
-import { isGuest, isCompanyAdmin, canManageUsers } from '@/lib/roles';
+import { isGuest, isCompanyAdmin, isCompanyMember, canManageUsers } from '@/lib/roles';
 
 const ROLE_CONFIG = {
   admin:         { label: 'Admin',         icon: Shield,    color: 'bg-primary/20 text-primary border-primary/30' },
@@ -23,6 +23,7 @@ const navItems = [
   { label: '알림', icon: Bell, path: '/notifications' },
   { label: '권한 변경 이력', icon: ShieldCheck, path: '/role-change-logs', companyAdminOnly: true },
   { label: '접속 기록', icon: History, path: '/access-logs', companyAdminOnly: true },
+  { label: '월별 접속기록 점검', icon: ShieldCheck, path: '/access-reviews', companyMemberOnly: true },
   { label: '파기 이력', icon: ScrollText, path: '/data-deletion-logs', companyAdminOnly: true },
   { label: '설정', icon: Settings, path: '/settings' },
 ];
@@ -68,7 +69,7 @@ export default function Sidebar({ mobileNavOpen = false, onCloseMobileNav = () =
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || canManageUsers(user)) && (!item.companyAdminOnly || isCompanyAdmin(user))).map((item) => {
+        {navItems.filter((item) => !isGuest(userRole) && (!item.adminOnly || canManageUsers(user)) && (!item.companyAdminOnly || isCompanyAdmin(user)) && (!item.companyMemberOnly || isCompanyMember(user))).map((item) => {
           const isActive = location.pathname === item.path || 
             (item.path !== '/' && location.pathname.startsWith(item.path));
           const Icon = item.icon;

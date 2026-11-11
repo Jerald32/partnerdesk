@@ -1,6 +1,7 @@
 import {useEffect,useState} from 'react';
 import {supabase} from '@/lib/supabaseClient';
 import {useRpcAction} from '@/hooks/useRpcAction';
+import {Dialog,DialogTrigger,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 
 function policyError(error){
  const reasons={
@@ -26,8 +27,9 @@ export function IpWhitelistPanel({onReload}){
  const [policy,setPolicy]=useState(null),[error,setError]=useState(''),[loading,setLoading]=useState(true),[refresh,setRefresh]=useState(0);
  const [editing,setEditing]=useState(null),[ip,setIP]=useState(''),[description,setDescription]=useState(''),[active,setActive]=useState(true);
  const [recoveryApproved,setRecoveryApproved]=useState(false),[notice,setNotice]=useState('');
+ const [modalOpen,setModalOpen]=useState(false),[formNotice,setFormNotice]=useState(''),[submitted,setSubmitted]=useState(false);
  const clearForm=()=>{setEditing(null);setIP('');setDescription('');setActive(true);setRecoveryApproved(false);};
- const {run,busy,error:saveError,unknown}=useRpcAction(()=>{clearForm();setLoading(true);setRefresh(value=>value+1);},policyError);
+ const {run,busy,error:saveError,unknown}=useRpcAction(()=>{clearForm();setModalOpen(false);setLoading(true);setRefresh(value=>value+1);},policyError);
  useEffect(()=>{
   const controller=new AbortController();
   async function load(){try{
@@ -39,9 +41,18 @@ export function IpWhitelistPanel({onReload}){
   void load();return()=>controller.abort();
  },[refresh]);
  const locked=busy||unknown||loading;
+ function openForm(row){
+  if(locked||policy.pending)return;
+  clearForm();setFormNotice('');setSubmitted(false);setNotice('');
+  if(row){setEditing(row.id);setIP(row.ip_address);setDescription(row.description||'');setActive(row.is_active);}
+  setModalOpen(true);
+ }
  async function save(event){
-  event.preventDefault();setNotice('');
-  if(!editing&&policy.rows.some(row=>identity(row.ip_address)===identity(ip))){setNotice('이미 등록된 IP입니다. 목록에서 수정해 주세요.');return;}
+  event.preventDefault();
+  if(locked||policy.pending)return;
+  setNotice('');setFormNotice('');setSubmitted(false);
+  if(!editing&&policy.rows.some(row=>identity(row.ip_address)===identity(ip))){setFormNotice('이미 등록된 IP입니다. 목록에서 수정해 주세요.');return;}
+  setSubmitted(true);
   const ok=await run('save_ip_entry',{p_id:editing,p_ip:ip.trim(),p_description:description.trim()||null,p_active:active,p_expected_version:policy.version});
   if(ok)setNotice('IP 설정을 저장했습니다. 차단 상태는 변경하지 않았습니다.');
  }
@@ -50,10 +61,17 @@ export function IpWhitelistPanel({onReload}){
   const ok=await run('save_ip_entry',{p_id:row.id,p_ip:row.ip_address,p_description:row.description,p_active:false,p_expected_version:policy.version});
   if(ok)setNotice('삭제 처리했습니다. 복구를 위해 사용 중지된 항목으로 보관합니다.');
  }
- return <section className="rounded-lg border bg-card p-4 sm:p-6 space-y-5 text-sm">
+ return <Dialog open={modalOpen} onOpenChange={open=>{if(!busy){setModalOpen(open);if(!open){clearForm();setFormNotice('');}}}}><section className="rounded-lg border bg-card p-4 sm:p-6 space-y-5 text-sm">
   <div className="flex flex-wrap items-start justify-between gap-3">
    <div><h3 className="font-semibold text-base">IP 화이트리스트</h3>
-    {policy&&<><p className="mt-2 font-medium">IP 차단: {policy.mode==='enforced'?'켜짐':'꺼짐'}</p>
+    {policy&&<><div className="mt-3 flex items-center gap-3">
+     <button type="button" role="switch" aria-label="IP 차단" aria-checked={policy.mode==='enforced'} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 ${policy.mode==='enforced'?'bg-primary':'bg-muted-foreground/40'}`} disabled={locked||(policy.mode==='monitor'&&policy.pending)} onClick={()=>{
+      if(policy.mode==='monitor'){
+       if(window.confirm('모든 조직의 IP 차단을 켜시겠습니까? 허용 IP와 복구 확인을 서버에서 검사합니다. 활성화 후 다시 로그인하여 10분 안에 정책을 확인해야 합니다.'))void run('request_ip_activation',{p_expected_version:policy.version});
+      }else if(window.confirm('IP 차단을 끄시겠습니까? 허용 목록과 직접 Supabase 접근 차단은 유지합니다.'))void run('disable_ip_policy',{p_expected_version:policy.version});
+     }}><span aria-hidden="true" className={`pointer-events-none h-5 w-5 rounded-full bg-white shadow transition-transform ${policy.mode==='enforced'?'translate-x-5':'translate-x-0'}`}/></button>
+     <p className="font-medium">IP 차단: {policy.mode==='enforced'?'켜짐':'꺼짐'} <span className="text-xs text-muted-foreground">({policy.mode==='enforced'?'ON':'OFF'})</span></p>
+    </div>
      <p className="mt-1 text-muted-foreground break-all">현재 접속 IP: {policy.current_ip||'확인 불가'}</p></>}
    </div>
    <button type="button" className={button} disabled={busy||loading} onClick={onReload}>새로고침</button>
@@ -63,34 +81,38 @@ export function IpWhitelistPanel({onReload}){
    {policy.pending&&<div role="status" className="rounded-md border p-3">정책 변경 확인이 필요합니다. 다시 로그인한 뒤 10분 안에 확인하지 않으면 다음 요청에서 이전 정책으로 돌아갑니다.
     <button type="button" className={`${button} mt-2 block w-full sm:w-auto`} disabled={locked} onClick={()=>void run('confirm_ip_transition',{})}>재로그인 후 정책 확인</button>
    </div>}
-   <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    <h4 className="font-medium sm:col-span-2">{editing?'IP 수정':'IP 등록'}</h4>
+   <div className="space-y-2"><div className="flex items-center justify-between gap-3">
+    <h4 className="font-medium">등록된 IP</h4>
+    <DialogTrigger asChild><button type="button" className={`${button} bg-primary text-primary-foreground`} disabled={locked||policy.pending} onClick={()=>openForm(null)}>+ IP 추가</button></DialogTrigger>
+   </div>
+    <div className="overflow-x-auto rounded-md border"><table className="w-full text-left">
+     <thead className="bg-muted/50 text-muted-foreground"><tr>{['IP/CIDR','설명','관리'].map(label=><th key={label} scope="col" className="px-3 py-3 font-medium whitespace-nowrap">{label}</th>)}</tr></thead>
+     <tbody>{policy.rows.map(row=><tr key={row.id} className="border-t">
+      <td className="px-3 py-3 align-top"><p className="font-medium break-all min-w-36">{row.ip_address}</p><p className="mt-1 text-xs text-muted-foreground">{row.is_active?'사용 중':'사용 중지'}</p></td>
+      <td className="px-3 py-3 align-top break-words">{row.description||'설명 없음'}</td>
+      <td className="px-3 py-3 align-top"><div className="flex gap-2 whitespace-nowrap">
+       <button type="button" className={button} disabled={locked||policy.pending} onClick={()=>openForm(row)}>수정</button>
+       <button type="button" className={button} disabled={locked||policy.pending||!row.is_active} onClick={()=>void remove(row)}>삭제</button>
+      </div></td>
+     </tr>)}{!policy.rows.length&&<tr><td colSpan={3} className="px-3 py-4 text-muted-foreground">등록된 IP가 없습니다.</td></tr>}</tbody>
+    </table></div>
+   </div>
+   {modalOpen&&<DialogContent className="max-h-[85vh] overflow-y-auto" onEscapeKeyDown={event=>{if(busy)event.preventDefault();}} onInteractOutside={event=>{if(busy)event.preventDefault();}}>
+    <DialogHeader><DialogTitle>{editing?'IP 수정':'IP 추가'}</DialogTitle><DialogDescription>IP 등록·수정만으로 차단이 켜지지는 않습니다.</DialogDescription></DialogHeader>
+   <form onSubmit={save} className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
     <label className="min-w-0">IP 또는 CIDR<input required maxLength={64} value={ip} disabled={locked} onChange={event=>setIP(event.target.value)} placeholder="예: 211.234.206.63/32" className="mt-1 w-full min-w-0 rounded-md border bg-background p-2"/></label>
     <label className="min-w-0">설명<input maxLength={200} value={description} disabled={locked} onChange={event=>setDescription(event.target.value)} placeholder="예: 장안동 사무실" className="mt-1 w-full min-w-0 rounded-md border bg-background p-2"/></label>
     {editing&&<label className="flex items-center gap-2 sm:col-span-2"><input type="checkbox" checked={active} disabled={locked} onChange={event=>setActive(event.target.checked)}/>사용</label>}
-    <div className="flex flex-col sm:flex-row gap-2 sm:col-span-2">
-     <button type="submit" className={`${button} bg-primary text-primary-foreground`} disabled={locked||policy.pending}>저장</button>
-     {editing&&<button type="button" className={button} disabled={locked} onClick={clearForm}>수정 취소</button>}
+    {formNotice&&<p role="alert" className="text-destructive sm:col-span-2">{formNotice}</p>}
+    {submitted&&saveError&&<p role="alert" className="text-destructive sm:col-span-2">{saveError}</p>}
+    <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:col-span-2">
+     {unknown&&<button type="button" className={button} onClick={onReload}>목록 새로고침</button>}
+     <button type="button" className={button} disabled={busy} onClick={()=>{setModalOpen(false);clearForm();setFormNotice('');}}>취소</button>
+     <button type="submit" className={`${button} bg-primary text-primary-foreground`} disabled={locked||policy.pending}>{busy?'저장 중…':'저장'}</button>
     </div>
    </form>
-   <div className="space-y-2"><h4 className="font-medium">등록된 IP</h4>
-    {!policy.rows.length&&<p className="text-muted-foreground">등록된 IP가 없습니다.</p>}
-    {policy.rows.map(row=><div key={row.id} className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md border p-3">
-     <div className="min-w-0"><p className="font-medium break-all">{row.ip_address}</p><p className="break-words text-muted-foreground">{row.description||'설명 없음'}</p><p className="mt-1 text-xs">{row.is_active?'사용 중':'사용 중지'}</p></div>
-     <div className="grid grid-cols-2 gap-2">
-      <button type="button" className={button} disabled={locked||policy.pending} onClick={()=>{setEditing(row.id);setIP(row.ip_address);setDescription(row.description||'');setActive(row.is_active);setNotice('');}}>수정</button>
-      <button type="button" className={button} disabled={locked||policy.pending||!row.is_active} onClick={()=>void remove(row)}>삭제</button>
-     </div>
-    </div>)}
-   </div>
-   <div className="border-t pt-4 space-y-2">
-    <button type="button" className={`${button} w-full sm:w-auto ${policy.mode==='monitor'?'bg-primary text-primary-foreground':''}`} disabled={locked||(policy.mode==='monitor'&&policy.pending)} onClick={()=>{
-     if(policy.mode==='monitor'){
-      if(window.confirm('모든 조직의 IP 차단을 켜시겠습니까? 허용 IP와 복구 확인을 서버에서 검사합니다. 활성화 후 다시 로그인하여 10분 안에 정책을 확인해야 합니다.'))void run('request_ip_activation',{p_expected_version:policy.version});
-     }else if(window.confirm('IP 차단을 끄시겠습니까? 허용 목록과 직접 Supabase 접근 차단은 유지합니다.'))void run('disable_ip_policy',{p_expected_version:policy.version});
-    }}>{policy.mode==='monitor'?'IP 차단 켜기':'IP 차단 끄기'}</button>
-    <p className="text-xs text-muted-foreground">IP 저장과 차단 상태는 별도로 관리합니다. 모든 조직에 공통 적용됩니다.</p>
-   </div>
+   </DialogContent>}
+   <p className="text-xs text-muted-foreground">IP 저장과 차단 상태는 별도로 관리합니다. 모든 조직에 공통 적용되며 Company Admin·Partner Admin은 IP 차단에서 기본 제외됩니다. 로그인·MFA·세션 검사는 계속 적용됩니다.</p>
    <details className="border-t pt-3"><summary className="cursor-pointer font-medium">고급 설정 / 복구 안내</summary>
     <div className="mt-3 space-y-3">
      <p>차단을 켜려면 현재 IP가 허용 목록에 포함되고, 독립된 Supabase 복구 확인 및 관리자 승인 또는 다른 허용 IP의 복구 접속 확인이 필요합니다.</p>
@@ -116,6 +138,6 @@ COMMIT;`}</pre>
    </details>
   </>}
   {notice&&<p role="status">{notice}</p>}
-  {(error||saveError)&&<p role="alert" className="text-destructive">{error||saveError}</p>}
- </section>;
+  {(error||(!modalOpen&&saveError))&&<p role="alert" className="text-destructive">{error||saveError}</p>}
+ </section></Dialog>;
 }

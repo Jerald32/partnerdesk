@@ -4,6 +4,7 @@ import { isCompanyAdmin } from '@/lib/roles';
 import { supabase } from '@/lib/supabaseClient';
 import { invokeAppAuth } from '@/lib/appAuth';
 import { useRpcAction } from '@/hooks/useRpcAction';
+import { accountStatusLabel } from '@/lib/accountStatus';
 
 const time=value=>value?new Date(value).toLocaleString():'확인된 로그인 없음';
 function ReviewRow({row,kind,actorId,onSaved}){
@@ -20,9 +21,9 @@ function ReviewRow({row,kind,actorId,onSaved}){
       void run('review_ticket_retention',{p_ticket_id:row.id,p_decision:decision,p_expected_version:row.version});
     }}>{label}</button>)}</div>
   </>:<>
-   <p className="font-medium">{row.display_name||row.email} · {row.role} · {row.account_status}</p>
+   <p className="font-medium">{row.display_name||row.email} · {row.role} · {accountStatusLabel(row.account_status)}</p>
    <p>마지막 업무 로그인: {time(row.last_login_at)}</p>
-   <p>{row.review_candidate===null?'휴면 기준 미설정':row.review_candidate?'장기 미접속 검토 대상':'기준 기간 내 계정'}
+   <p>{row.review_candidate===null?'수동 검토 기준 미설정':row.review_candidate?'장기 미접속 검토 대상':'수동 검토 기준 기간 내 계정'}
     {row.no_confirmed_login&&' · 미로그인 계정은 생성일 기준 검토'}{row.automatic_lock_exempt&&' · 자동 잠금 제외'}</p>
    <div className="flex gap-3">
     {row.id!==actorId&&!['disabled','suspended'].includes(row.account_status)&&<button disabled={disabled} className="text-destructive" onClick={()=>{
@@ -31,7 +32,7 @@ function ReviewRow({row,kind,actorId,onSaved}){
     }}>비활성화 승인</button>}
     {['disabled','suspended'].includes(row.account_status)&&<button disabled={disabled} className="text-primary" onClick={()=>{
      if(window.confirm('기존 조직·권한을 유지한 채 계정을 재활성화하시겠습니까?')) void run('reactivate_profile',{p_profile_id:row.id});
-    }}>재활성화 승인</button>}
+    }}>활성화</button>}
    </div>
   </>}
   {error&&<p role="alert" className="text-destructive">{error}</p>}
@@ -60,11 +61,11 @@ export default function LifecycleReview(){
  if(!isCompanyAdmin(user))return null;
  return <section className="rounded-lg border bg-card p-4 space-y-3">
   <h3 className="font-semibold">보존·휴면 계정 검토</h3>
-  <p className="text-xs text-muted-foreground">Ticket 생성 시각부터 UTC 달력 3년 · 상태 무관. 자동 삭제·익명화·계정 잠금은 비활성입니다.</p>
+  <p className="text-xs text-muted-foreground">Ticket 생성 시각부터 UTC 달력 3년 · 상태 무관. 자동 삭제·익명화는 비활성입니다. Partner 계정은 매일 새벽 2시 점검하여 23일 미접속 시 경고, 30일 미접속 시 차단합니다. Company·Guest·자동 관리 제외·로그인 이력 없는 계정은 제외합니다.</p>
   <div className="flex gap-3 text-sm">{[['tickets','보존기간 경과 Ticket'],['accounts','계정 접속 현황']].map(([value,label])=>
    <button key={value} className={kind===value?'text-primary':''} onClick={()=>{setKind(value);setOffset(0);}}>{label}</button>)}
    <button disabled={loading} onClick={reload}>새로고침</button></div>
-  {kind==='accounts'&&<form className="space-y-2 text-xs" onSubmit={e=>{e.preventDefault();if(window.confirm('검토 기준만 저장합니다. 계정은 자동 잠금되지 않습니다.'))
+  {kind==='accounts'&&<form className="space-y-2 text-xs" onSubmit={e=>{e.preventDefault();if(window.confirm('수동 검토 기준만 저장합니다. Partner 자동 관리의 23일 경고·30일 차단 기준은 유지됩니다.'))
    void run('set_dormancy_review_days',{p_days:days===''?null:Number(days)});}}>
    <label>휴면 검토 기준(일, 빈칸은 미설정) <input aria-label="휴면 검토 기준 일수" type="number" min="1" max="36500" value={days}
     onChange={e=>setDays(e.target.value)} className="border rounded p-2 bg-background w-24"/></label>

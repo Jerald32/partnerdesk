@@ -7,6 +7,24 @@ function module(path,imports={}){
  const exports={};const code=ts.transpileModule(readFileSync(new URL('../'+path,import.meta.url),'utf8'),{fileName:path,compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
  new Function('require','exports',code)(name=>{if(name in imports)return imports[name];throw Error(name);},exports);return exports;
 }
+
+test('MFA messages use server counts for each failure and preserve safe fallbacks',async()=>{
+ let body;
+ const {invokeAppAuth}=module('src/lib/appAuth.js',{'./appSession':{},'./supabaseClient':{supabase:{
+  auth:{getSession:async()=>({data:{session:{access_token:'fixture',user:{id:'fixture'}}}})},
+  functions:{invoke:async()=>({error:{context:Response.json(body,{status:400})}})}
+ }}});
+ for(let count=1;count<=4;count++){
+  body={success:false,reason:'code_invalid',fail_count:count,max_attempts:5};
+  await assert.rejects(invokeAppAuth('verify-code'),e=>e.message===`인증번호가 일치하지 않습니다. (${count}/5 - 5회 실패시 5분간 잠금됩니다)`);
+ }
+ body={success:false,reason:'mfa_locked',fail_count:5,max_attempts:5};
+ await assert.rejects(invokeAppAuth('verify-code'),/5분간 잠겼습니다\. \(5\/5\)/);
+ for(const count of [undefined,0,6,'2',1.5]){
+  body={success:false,reason:'code_invalid',fail_count:count,max_attempts:5};
+  await assert.rejects(invokeAppAuth('verify-code'),e=>!e.message.includes('/5'));
+ }
+});
 test('Edge verifies the exact JWT once per request without sharing users or subsequent requests',async()=>{
  const {authenticateOnce,timedServices}=module('supabase/functions/app-auth/timing.ts');
  let calls=0;const service={authenticate:async jwt=>{calls++;if(jwt==='invalid')throw Error('invalid');return {id:jwt};}};

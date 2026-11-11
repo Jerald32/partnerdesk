@@ -10,6 +10,8 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 
 const TYPE_CONFIG = {
+  access_review_requested: { icon: UserCheck, color: 'text-primary', bg: 'bg-primary/10', label: '접속기록 점검 승인 요청' },
+  access_review_decided: { icon: CheckCircle2, color: 'text-primary', bg: 'bg-primary/10', label: '접속기록 점검 처리 결과' },
   sla_warning: { icon: AlertTriangle, color: 'text-orange-400', bg: 'bg-orange-500/10', label: 'SLA 경고' },
   sla_breach: { icon: AlertCircle, color: 'text-red-400', bg: 'bg-red-500/10', label: 'SLA 초과' },
   status_change: { icon: CheckCircle2, color: 'text-blue-400', bg: 'bg-blue-500/10', label: '상태 변경' },
@@ -30,7 +32,7 @@ export default function Notifications() {
     const controller=new AbortController();setLoading(true);setLoadError('');
     async function load(){try{
       await invokeAppAuth('validate-session');if(controller.signal.aborted)return;
-      const rows=await readRows(()=>supabase.from('notifications').select('id,ticket_id,type,message,is_read,created_at',{count:'exact'}).eq('recipient_profile_id',user.id).order('created_at',{ascending:false}).order('id'),controller.signal);
+      const rows=await readRows(()=>supabase.from('notifications').select('id,ticket_id,type,message,is_read,created_at,access_review_id',{count:'exact'}).eq('recipient_profile_id',user.id).order('created_at',{ascending:false}).order('id'),controller.signal);
       if(!controller.signal.aborted)setNotifications(rows);
     }catch{if(!controller.signal.aborted)setLoadError('알림을 조회하지 못했습니다. 세션과 권한을 확인해 주세요.');}
     finally{if(!controller.signal.aborted)setLoading(false);}}
@@ -92,7 +94,8 @@ export default function Notifications() {
                 onClick={() => {
                   if (busy || unknown) return;
                   if (!notif.is_read) void markRead(notif.id);
-                  if (notif.ticket_id) navigate(`/tickets/${notif.ticket_id}`);
+                  if (notif.access_review_id) navigate(`/access-reviews/${notif.access_review_id}`);
+                  else if (notif.ticket_id) navigate(`/tickets/${notif.ticket_id}`);
                 }}
               >
                 <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0", conf.bg)}>

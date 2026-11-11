@@ -5,6 +5,20 @@ import {readQuery,projection} from '../server/gateway/transport.mjs';
 import {verifyProof} from '../server/gateway/security.mjs';
 const userId='50000000-0000-4000-8000-000000000001',session='ab'.repeat(32),secret='01'.repeat(32);
 
+test('gateway forwards only bounded MFA failure counts',async()=>{
+ const oldFetch=globalThis.fetch,oldEnv={...process.env};let failure;
+ Object.assign(process.env,{VERCEL:'1',VERCEL_ENV:'production',PARTNERDESK_SUPABASE_URL:'https://bqtlopwgjvvugalktldr.supabase.co',PARTNERDESK_SUPABASE_PUBLISHABLE_KEY:'public-fixture',PARTNERDESK_SUPABASE_SERVICE_KEY:'service-fixture',PARTNERDESK_GATEWAY_SIGNING_KEY:secret});
+ globalThis.fetch=async url=>String(url).endsWith('/auth/v1/user')?Response.json({id:userId}):String(url).endsWith('/backend_gateway_policy')?Response.json({mode:'enforced',version:1,entries:['192.0.2.0/24']}):Response.json(failure,{status:400});
+ try{
+  for(const [reason,count,max,expected] of [['code_invalid',1,5,1],['mfa_locked',5,5,5],['code_invalid',6,5,undefined],['code_invalid','1',5,undefined],['code_invalid',1,6,undefined],['challenge_invalid',1,5,undefined]]){
+   failure={success:false,reason,fail_count:count,max_attempts:max};let body;
+   const res={setHeader(){},end(value){body=JSON.parse(value);}};
+   await handler({url:'/api/gateway?gateway_path=functions/v1/app-auth',method:'POST',body:{action:'verify-code'},headers:{authorization:'Bearer fixture','x-vercel-forwarded-for':'192.0.2.1'}},res);
+   assert.equal(res.statusCode,400);assert.equal(body.fail_count,expected);
+  }
+ }finally{globalThis.fetch=oldFetch;for(const k of Object.keys(process.env))if(!Object.hasOwn(oldEnv,k))delete process.env[k];Object.assign(process.env,oldEnv);}
+});
+
 test('without DB opt-in all app-auth actions retain the existing protected Edge route',async()=>{
  const oldFetch=globalThis.fetch,oldEnv={...process.env};
  Object.assign(process.env,{VERCEL:'1',VERCEL_ENV:'production',PARTNERDESK_SUPABASE_URL:'https://bqtlopwgjvvugalktldr.supabase.co',PARTNERDESK_SUPABASE_PUBLISHABLE_KEY:'public-fixture',PARTNERDESK_SUPABASE_SERVICE_KEY:'service-fixture',PARTNERDESK_GATEWAY_SIGNING_KEY:secret});

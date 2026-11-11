@@ -3,7 +3,18 @@
 [functions.app-auth]
 verify_jwt = false
 
+# Dedicated high-entropy scheduler credential is checked by the handler.
+[functions.inactivity-mail]
+verify_jwt = false
+
+[functions.password-policy]
+verify_jwt = false
+
 # Only these declared Auth settings are pushed; SMTP and existing redirects stay unchanged.
+[auth]
+minimum_password_length = 8
+password_requirements = "lower_upper_letters_digits_symbols"
+
 [auth.email]
 enable_confirmations = true
 otp_length = 6

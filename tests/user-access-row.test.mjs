@@ -50,7 +50,7 @@ function fixture(options = {}) {
     const imports = name => name === 'react' ? react
       : name === '@/lib/supabaseClient' || name === './supabaseClient' ? { supabase }
       : name === './roles' ? load('src/lib/roles.js')
-      : name.startsWith('@/') ? load('src/' + name.slice(2) + (name.endsWith('useRpcAction') || name.endsWith('userAccessForm') || name.endsWith('supabaseData') || name.endsWith('roles') ? '.js' : '.jsx'))
+      : name.startsWith('@/') ? load('src/' + name.slice(2) + (name.endsWith('useRpcAction') || name.endsWith('userAccessForm') || name.endsWith('supabaseData') || name.endsWith('roles') || name.endsWith('accountStatus') ? '.js' : '.jsx'))
       : require(name);
     new Function('require', 'exports', 'window', source)(imports, exports, { confirm() { confirmations++; return options.confirm !== false; } });
     return exports;
